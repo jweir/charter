@@ -4,6 +4,7 @@ import Browser
 import Charter exposing (Box, Element(..), Layer(..), Point, Size, chart, sparkline)
 import Charter.Extras as Charter
 import Html as Html
+import Html.Attributes as HA
 import Svg
 import Svg.Attributes as Svg
 import Time
@@ -89,7 +90,8 @@ view : Model -> Html.Html Msg
 view model =
     Html.div []
         [ Html.div []
-            [ chart (Size 620 120)
+            [ Html.p [] [ Html.text "Mouse over, click and click and drag the below chart for example interactions" ]
+            , chart (Size 620 120)
                 [ Layer
                     (Box 600 70 10 10)
                     [ Highlight [ Svg.fill "rgba(255,255,0,0.4)", Svg.stroke "rgba(0,0,0,0.2)", Svg.strokeWidth "0 2 0 2" ] Charter.OnlyX model.listener
@@ -114,16 +116,18 @@ view model =
                 , timeAxis (Box 600 10 10 80) 10 data0
                 ]
             , if Charter.selection model.listener /= Nothing then
-                chart (Size 820 440)
-                    [ Layer
-                        (Box 800 380 10 10)
-                        [ Line [] (filter data0 model.listener)
-                        , Line [] (filter data1 model.listener)
-                        , ZeroLine []
+                Html.div [ HA.style "position" "absolute", HA.style "left" "600px" ]
+                    [ chart (Size 820 440)
+                        [ Layer
+                            (Box 800 380 10 10)
+                            [ Line [] (filter data0 model.listener)
+                            , Line [] (filter data1 model.listener)
+                            , ZeroLine []
+                            ]
+                        , Layer (Box 800 20 10 390)
+                            [ Area [ Svg.stroke "none", Svg.fill "rgb(150,150,255)" ] (filter data2 model.listener) ]
+                        , timeAxis (Box 800 10 10 410) 10 (filter data1 model.listener)
                         ]
-                    , Layer (Box 800 20 10 390)
-                        [ Area [ Svg.stroke "none", Svg.fill "rgb(150,150,255)" ] (filter data2 model.listener) ]
-                    , timeAxis (Box 800 10 10 410) 10 (filter data1 model.listener)
                     ]
 
               else
