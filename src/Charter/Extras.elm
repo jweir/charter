@@ -1,6 +1,6 @@
 module Charter.Extras exposing
     ( Axes(..)
-    , extent, minMax
+    , minMax
     )
 
 {-| Additional functions to help in generating the graphs.
@@ -13,7 +13,7 @@ module Charter.Extras exposing
 
 # Functions
 
-@docs extent, minMax
+@docs minMax
 
 -}
 
@@ -35,7 +35,7 @@ type Axes
     | Y
 
 
-{-| Returns the min and max value for the given.
+{-| Returns the min and max value for the given Axis.
 An empty list will return (0,0)
 -}
 minMax : Axes -> List ( Float, Float ) -> ( Float, Float )
@@ -55,7 +55,7 @@ minMax axes data =
         |> (\( min, max ) -> ( Maybe.withDefault 0 min, Maybe.withDefault 0 max ))
 
 
-{-| returns the min and max Point on either the X or Y axes
+{-| returns the min and max Point on either the X or Y axes - not used currently
 -}
 extent : Axes -> List ( Float, Float ) -> List ( Float, Float )
 extent axes data =

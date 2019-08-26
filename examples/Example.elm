@@ -4,6 +4,7 @@ import Browser
 import Charter exposing (Box, Element(..), Layer(..), Point, Size, chart, sparkline)
 import Charter.Extras as Charter
 import Html as Html
+import Svg
 import Svg.Attributes as Svg
 import Time
 
@@ -11,14 +12,16 @@ import Time
 type alias Model =
     { listener : Charter.Listener
     , listener2 : Charter.Listener
-    , selected : Maybe ( Point, Point )
-    , selected2 : Maybe ( Point, Point )
+    , clicked : Maybe Point
+    , hover : Maybe Point
     }
 
 
 type Msg
-    = GraphEvent Charter.Listener (Maybe ( Point, Point ))
-    | GraphEvent2 Charter.Listener (Maybe ( Point, Point ))
+    = Select Charter.Listener
+    | Select2 Charter.Listener
+    | Click Charter.Listener
+    | Hover Charter.Listener
 
 
 main : Program () Model Msg
@@ -28,8 +31,8 @@ main =
             \_ ->
                 ( { listener = Charter.listener
                   , listener2 = Charter.listener
-                  , selected = Nothing
-                  , selected2 = Nothing
+                  , clicked = Nothing
+                  , hover = Nothing
                   }
                 , Cmd.none
                 )
@@ -42,36 +45,42 @@ main =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
-        [ Charter.subscribe model.listener GraphEvent
-        , Charter.subscribe model.listener2 GraphEvent2
+        [ Charter.subscribe model.listener Select
+        , Charter.subscribe model.listener2 Select2
         ]
 
 
-filter : Charter.DataSet -> Maybe ( Point, Point ) -> Charter.DataSet
-filter data bounds =
-    case bounds of
+filter : Charter.DataSet -> Charter.Listener -> Charter.DataSet
+filter data listener =
+    case Charter.selection listener of
         Nothing ->
             []
 
-        Just ( ( x0, y0 ), ( x1, y1 ) ) ->
-            List.filter
-                (\( x, y ) ->
-                    x >= x0 && x <= x1
-                 --&& y >= y0 && y <= y1
-                )
-                data
+        Just ( ( x0, _ ), ( x1, _ ) ) ->
+            data
+                |> List.filter (\( x, _ ) -> x >= x0 && x <= x1)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        GraphEvent sel bounds ->
-            ( { model | listener = sel, selected = bounds }
+        Click sel ->
+            ( { model | listener = sel, clicked = Charter.clicked sel }
             , Cmd.none
             )
 
-        GraphEvent2 sel bounds ->
-            ( { model | listener2 = sel, selected2 = bounds }
+        Hover sel ->
+            ( { model | listener = sel, hover = Charter.hover sel }
+            , Cmd.none
+            )
+
+        Select sel ->
+            ( { model | listener = sel }
+            , Cmd.none
+            )
+
+        Select2 sel ->
+            ( { model | listener2 = sel }
             , Cmd.none
             )
 
@@ -87,9 +96,14 @@ view model =
                     ]
                 , Layer
                     (Box 600 50 10 10)
-                    [ Listen model.listener GraphEvent
+                    [ OnClick model.listener Click
+                    , OnSelect model.listener Select
+                    , OnHover model.listener Hover
                     , Line [ Svg.stroke "red" ] data0
                     , Line [] data1
+                    , Dot [ Svg.r "5" ] (List.filterMap identity [ model.clicked ])
+                    , Dot [ Svg.fill "red", Svg.r "2" ] (List.filterMap identity [ nearestPoint data0 model.hover ])
+                    , Label [] (hoverLabel model.hover)
                     , ZeroLine []
                     ]
                 , Layer
@@ -99,17 +113,17 @@ view model =
                     ]
                 , timeAxis (Box 600 10 10 80) 10 data0
                 ]
-            , if model.selected /= Nothing then
-                chart (Size 620 120)
+            , if Charter.selection model.listener /= Nothing then
+                chart (Size 820 440)
                     [ Layer
-                        (Box 600 50 10 10)
-                        [ Line [] (filter data0 model.selected)
-                        , Line [] (filter data1 model.selected)
+                        (Box 800 380 10 10)
+                        [ Line [] (filter data0 model.listener)
+                        , Line [] (filter data1 model.listener)
                         , ZeroLine []
                         ]
-                    , Layer (Box 600 20 10 60)
-                        [ Area [ Svg.stroke "none", Svg.fill "rgb(150,150,255)" ] (filter data2 model.selected) ]
-                    , timeAxis (Box 600 10 10 80) 10 (filter data1 model.selected)
+                    , Layer (Box 800 20 10 390)
+                        [ Area [ Svg.stroke "none", Svg.fill "rgb(150,150,255)" ] (filter data2 model.listener) ]
+                    , timeAxis (Box 800 10 10 410) 10 (filter data1 model.listener)
                     ]
 
               else
@@ -117,19 +131,19 @@ view model =
             , Html.p []
                 [ Html.text "Here is a sparkline. "
                 , sparkline (Size 100 20)
-                    [ Listen model.listener2 GraphEvent2
+                    [ OnSelect model.listener2 Select2
                     , Highlight [] Charter.OnlyX model.listener2
                     , Line [] data0
                     , Line [] data1
                     ]
                 , Html.text " Click and drag on it for details."
-                , if model.selected2 /= Nothing then
+                , if Charter.selection model.listener2 /= Nothing then
                     let
                         a =
-                            filter data0 model.selected2
+                            filter data0 model.listener2
 
                         b =
-                            filter data1 model.selected2
+                            filter data1 model.listener2
                     in
                     Html.div []
                         [ chart (Size 620 140)
@@ -149,6 +163,32 @@ view model =
         ]
 
 
+hoverLabel : Maybe Point -> List ( Point, List (Svg.Attribute a), String )
+hoverLabel point =
+    [ nearestPoint data0 point ]
+        |> List.filterMap identity
+        |> List.map (\( x, y ) -> ( ( x, y ), [], toFloat (round (y * 10)) / 10 |> String.fromFloat ))
+
+
+nearestPoint : List Point -> Maybe Point -> Maybe Point
+nearestPoint points point =
+    case point of
+        Nothing ->
+            Nothing
+
+        Just ( x0, _ ) ->
+            points
+                |> List.foldr
+                    (\( x, y ) p ->
+                        if x0 < x then
+                            Just ( x, y )
+
+                        else
+                            p
+                    )
+                    Nothing
+
+
 timeAxis : Charter.Box -> Int -> Charter.DataSet -> Charter.Layer Msg
 timeAxis box ticks data =
     let
@@ -159,7 +199,7 @@ timeAxis box ticks data =
             (x1 - x0) / toFloat ticks
 
         times =
-            List.repeat ticks ( x0, box.height / 2 )
+            List.repeat ticks ( x0, box.height )
                 |> List.indexedMap (\i ( x, y ) -> ( x + (toFloat i * delta), y ))
 
         fmtTime time =
@@ -176,8 +216,8 @@ timeAxis box ticks data =
         [ Domain [ ( x0, 0 ), ( x1, box.height ) ]
         , Bar [] 1 times
         , Label
-            [ Svg.fontSize "10px", Svg.textAnchor "middle" ]
-            (List.map (\( x, y ) -> ( ( x, y ), [], x |> fmtTime )) times)
+            [ Svg.fontSize "10px", Svg.textAnchor "middle", Svg.transform "translate(0, 10)" ]
+            (List.map (\( x, y ) -> ( ( x, y - 10 ), [], x |> fmtTime )) times)
         ]
 
 

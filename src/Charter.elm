@@ -1,7 +1,7 @@
 module Charter exposing
-    ( sparkline, chart, Element(..), Style
-    , Point, DataSet, LabelSet, Box, Size, Constraint(..), Layer(..)
-    , Listener, subscribe, listener, EventMsg
+    ( sparkline, Size, Element(..), chart, Layer(..), Box, Constraint(..)
+    , Point, DataSet, LabelSet
+    , Listener, listener, subscribe, selection, clicked, hover
     )
 
 {-| This library is for generating inline graphs, called sparklines.
@@ -9,17 +9,17 @@ module Charter exposing
 
 # Definition
 
-@docs sparkline, chart, Element, Style
+@docs sparkline, Size, Element, chart, Layer, Box, Constraint
 
 
 # Data types
 
-@docs Point, DataSet, LabelSet, Box, Size, Constraint, Layer
+@docs Point, DataSet, LabelSet
 
 
 # Events
 
-@docs Listener, subscribe, listener, EventMsg
+@docs Listener, listener, subscribe, selection, clicked, hover
 
 -}
 
@@ -82,7 +82,12 @@ There are also some options which can be applied to each graph:
   - **Domain** includes the given data into the graph's domain.
     This is useful when creating multiple graphs that need to have the same scale.
   - **ZeroLine** param which will draw a line at the 0 y axis
-  - **Listen** for add event listeners. This is used for selecting data on the graph.
+
+The charts support events as well:
+
+  - **OnSelect** Event for when a selection is made.
+  - **OnClick** Tracks click events.
+  - **OnHover** Tracks the mouse moving over the chart.
 
 **Examples**
 
@@ -104,23 +109,29 @@ See Example.elm for more examples, including eventing.
 
 -}
 type Element a
-    = Area (Style a) DataSet
-    | Bar (Style a) Float DataSet
-    | Dot (Style a) DataSet
-    | Label (Style a) (LabelSet a)
-    | Line (Style a) DataSet
+    = Area (List (Svg.Attribute a)) DataSet
+    | Bar (List (Svg.Attribute a)) Float DataSet
+    | Dot (List (Svg.Attribute a)) DataSet
+    | Label (List (Svg.Attribute a)) (LabelSet a)
+    | Line (List (Svg.Attribute a)) DataSet
       -- options
     | Domain DataSet
-    | Highlight (Style a) Constraint Listener
-    | ZeroLine (Style a)
+    | Highlight (List (Svg.Attribute a)) Constraint Listener
+    | ZeroLine (List (Svg.Attribute a))
       -- events
-    | Listen Listener (Listener -> Maybe ( Point, Point ) -> a)
+    | OnSelect Listener (Listener -> a)
+    | OnClick Listener (Listener -> a)
+    | OnHover Listener (Listener -> a)
 
 
-{-| A list of Svg.Attributes
+{-| When highlighting a selected region the application can have the selection contrainted to just the X axis or be free.
+
+You would most likely use OnlyX when selecting a timeseries.
+
 -}
-type alias Style a =
-    List (Svg.Attribute a)
+type Constraint
+    = FreeForm
+    | OnlyX
 
 
 {-| Defines the size and position of chart elements
@@ -200,6 +211,17 @@ type Layer a
 
 
 {-| Use chart to draw graphics with layers. Layers can be positioned and overlayed, allowing for charts with margins and different regions.
+
+    chart (Size 620 120)
+        [ Layer
+            (Box 600 50 10 10)
+            [ Line [] data0
+            , ZeroLine []
+            ]
+        , Layer (Box 600 20 10 60)
+            [ Area [ Svg.stroke "none", Svg.fill "rgb(150,150,255)" ] data1 ]
+        ]
+
 -}
 chart : Size -> List (Layer a) -> Svg a
 chart size layers =
@@ -264,33 +286,23 @@ convert box elements =
                     (\set ->
                         case set of
                             Event e ->
-                                case e of
-                                    EventSelect sel msg ->
-                                        Just (listen box sel msg scalar)
+                                Just (listen box e scalar)
 
                             Command s ->
                                 Nothing
                     )
+                |> List.concatMap identity
     in
     commands
         |> List.concatMap collector
         -- add the events to the end, so it is on top of the other elements
-        |> (\list -> list ++ events)
+        |> (\list -> list ++ [ eventArea scalar events ])
         |> layer box
 
 
 type LayerSet a
     = Command (CommandSet a)
     | Event (EventSet a)
-
-
-{-| -}
-type alias EventMsg msg =
-    Listener -> Maybe ( Point, Point ) -> msg
-
-
-type EventSet a
-    = EventSelect Listener (EventMsg a)
 
 
 type alias CommandSet a =
@@ -303,8 +315,14 @@ type alias CommandSet a =
 toLayerSet : Element a -> LayerSet a
 toLayerSet msg =
     case msg of
-        Listen selector eventMsg ->
-            EventSelect selector eventMsg |> Event
+        OnSelect listener_ eventMsg ->
+            EventSelect listener_ eventMsg |> Event
+
+        OnClick listener_ eventMsg ->
+            EventClick listener_ eventMsg |> Event
+
+        OnHover listener_ eventMsg ->
+            EventHover listener_ eventMsg |> Event
 
         Bar style width data ->
             CommandSet (bar width) data style |> Command
@@ -604,15 +622,23 @@ joinAttr fun n =
 -- EVENTS
 
 
-{-| TODO: Document how to handle events
+type EventSet a
+    = EventSelect Listener (Listener -> a)
+    | EventClick Listener (Listener -> a)
+    | EventHover Listener (Listener -> a)
+
+
+{-| A listener to maintain the state of events (selection, hover and clicks). A
+listener can be shared across charts with the same scale.
 -}
 type Listener
-    = Select Selected
+    = Listener EventRecord
 
 
-type alias Selected =
+type alias EventRecord =
     { mouseDown : Bool
     , box : Box
+    , scalar : Maybe Scalar
 
     -- the starting point on the page
     , offset : Maybe Point
@@ -620,106 +646,172 @@ type alias Selected =
 
     -- the bounding box in absolute size to the SVG graph
     , current : Maybe Point
-    , scalar : Maybe Scalar
+
+    -- last clicked position
+    , clicked : Maybe Point
+    , hover : Maybe Point
     }
 
 
-{-| Listener will create a new event listener. You will need to add this to your subscriptions.
+{-| Create a new event listener.
 -}
 listener : Listener
 listener =
-    Select (Selected False (Box 0 0 0 0) Nothing Nothing Nothing Nothing)
+    Listener (EventRecord False (Box 0 0 0 0) Nothing Nothing Nothing Nothing Nothing Nothing)
 
 
-{-| The entry point to create a graph. See Element.
+{-| When tracking `OnSelect` a subscription will be required. The mouse events are tracked outside of the chart's SVG element.
+
+        type alias Model =
+            { listener : Listener }
+
+        type Msg
+            = Select Listener
+
+        subscriptions =
+            Sub.batch [ subscribe model.listener Select ]
+
 -}
-subscribe : Listener -> EventMsg a -> Sub a
-subscribe selector eventMsg =
+subscribe : Listener -> (Listener -> a) -> Sub a
+subscribe listener_ eventMsg =
     let
-        map m =
-            Json.map2 m
-                (Json.field "pageX" Json.int)
-                (Json.field "pageY" Json.int)
-
-        -- DRY up
+        offsetPosition : EventRecord -> (Listener -> a) -> Json.Decoder a
         offsetPosition sel msg =
             case sel.offset of
                 Nothing ->
-                    Json.succeed (msg (Select sel) Nothing)
+                    Json.succeed (msg (Listener sel))
 
                 Just ( x0, y0 ) ->
-                    map
+                    Json.map2
                         (\x y ->
                             let
                                 sel_ =
                                     { sel | current = Just ( (x |> toFloat) - x0, (y |> toFloat) - y0 ) }
-
-                                dataBound =
-                                    case sel.scalar of
-                                        Nothing ->
-                                            Nothing
-
-                                        Just scalar ->
-                                            case ( sel.start, sel.current ) of
-                                                ( Just ( dx0, dy0 ), Just ( dx1, dy1 ) ) ->
-                                                    let
-                                                        ( ix, iy ) =
-                                                            scalar.inverter
-
-                                                        ( bx0, by0 ) =
-                                                            ( ix dx0, iy (dy0 - sel.box.height |> abs) )
-
-                                                        ( bx1, by1 ) =
-                                                            ( ix dx1, iy (dy1 - sel.box.height |> abs) )
-                                                    in
-                                                    Just
-                                                        ( ( min bx0 bx1, min by0 by1 )
-                                                        , ( max bx0 bx1, max by0 by1 )
-                                                        )
-
-                                                _ ->
-                                                    Nothing
                             in
-                            msg (Select sel_) dataBound
+                            Listener sel_ |> msg
                         )
-
-        active sel msg =
-            -- order matters LIFO seems to be the rule, the mouseup cancels the mouse move, maybe?
-            [ Browser.onMouseMove (offsetPosition sel msg)
-            , Browser.onMouseUp (offsetPosition { sel | mouseDown = False } msg)
-            ]
+                        (Json.field "pageX" Json.int)
+                        (Json.field "pageY" Json.int)
     in
     Sub.batch <|
-        case selector of
-            Select s ->
-                if s.mouseDown == True then
-                    active s eventMsg
+        case listener_ of
+            Listener sel ->
+                if sel.mouseDown == True then
+                    [ Browser.onMouseMove (offsetPosition sel eventMsg)
+                    , Browser.onMouseUp (offsetPosition { sel | clicked = Nothing, mouseDown = False } eventMsg)
+                    ]
 
                 else
                     []
 
 
-{-| TODO support mousemove when outside of the region, this will probably require a subscription
+{-| Clicked returns a point from a click event.
 -}
-listen : Box -> Listener -> (Listener -> Maybe ( Point, Point ) -> a) -> Scalar -> Svg.Svg a
-listen box selected msg scalar =
+clicked : Listener -> Maybe Point
+clicked (Listener sel) =
+    case sel.scalar of
+        Nothing ->
+            Nothing
+
+        Just scalar ->
+            case sel.clicked of
+                Just ( x, y ) ->
+                    let
+                        ( ix, iy ) =
+                            scalar.inverter
+                    in
+                    Just
+                        ( ix x, iy (y - sel.box.height |> abs) )
+
+                _ ->
+                    Nothing
+
+
+{-| Hover returns a point from a hover event.
+-}
+hover : Listener -> Maybe Point
+hover (Listener sel) =
+    case ( sel.scalar, sel.hover ) of
+        ( Just scalar, Just ( x, y ) ) ->
+            let
+                ( ix, iy ) =
+                    scalar.inverter
+            in
+            Just
+                ( ix x, iy (y - sel.box.height |> abs) )
+
+        _ ->
+            Nothing
+
+
+{-| Selection returns a box with the selected boundaries of the data.
+
+Use this selection to filter the applications data into a subset.
+
+    filter : DataSet -> Listener -> DataSet
+    filter data listener =
+        case selection listener of
+            Nothing ->
+                []
+
+            Just ( ( x0, _ ), ( x1, _ ) ) ->
+                data
+                    |> List.filter (\( x, _ ) -> x >= x0 && x <= x1)
+
+-}
+selection : Listener -> Maybe ( Point, Point )
+selection l =
     let
         sel =
-            case selected of
-                Select s ->
-                    s
+            case l of
+                Listener sel_ ->
+                    sel_
+    in
+    case sel.scalar of
+        Nothing ->
+            Nothing
 
-        ( ( x1, y1 ), ( x2, y2 ) ) =
-            scalar.domain
+        Just scalar ->
+            case ( sel.start, sel.current ) of
+                ( Just ( dx0, dy0 ), Just ( dx1, dy1 ) ) ->
+                    let
+                        ( ix, iy ) =
+                            scalar.inverter
 
-        ( mx, my ) =
-            scalar.range
+                        ( bx0, by0 ) =
+                            ( ix dx0, iy (dy0 - sel.box.height |> abs) )
 
-        ( ix, iy ) =
-            scalar.inverter
+                        ( bx1, by1 ) =
+                            ( ix dx1, iy (dy1 - sel.box.height |> abs) )
+                    in
+                    Just
+                        ( ( min bx0 bx1, min by0 by1 )
+                        , ( max bx0 bx1, max by0 by1 )
+                        )
 
-        -- DRY up
-        offsetStart m =
+                _ ->
+                    Nothing
+
+
+{-| TODO support mousemove when outside of the region, this will probably require a subscription
+-}
+listen : Box -> EventSet a -> Scalar -> List (Svg.Attribute a)
+listen box eventSet scalar =
+    case eventSet of
+        EventSelect listener_ msg ->
+            listenSelection box listener_ msg scalar
+
+        EventClick listener_ msg ->
+            listenClick box listener_ msg scalar
+
+        EventHover listener_ msg ->
+            listenHover box listener_ msg scalar
+
+
+listenSelection : Box -> Listener -> (Listener -> a) -> Scalar -> List (Svg.Attribute a)
+listenSelection box selected msg scalar =
+    let
+        offsetStart sel m =
             Json.map4
                 (\oX oY x y ->
                     let
@@ -737,54 +829,105 @@ listen box selected msg scalar =
                                 , current = Nothing
                             }
                     in
-                    msg (Select sel_) Nothing
+                    msg (Listener sel_)
                 )
                 (Json.field "pageX" Json.int)
                 (Json.field "pageY" Json.int)
                 (Json.field "offsetX" Json.int)
                 (Json.field "offsetY" Json.int)
-
-        events =
-            if sel.mouseDown == True then
+    in
+    case selected of
+        Listener s ->
+            if s.mouseDown == True then
                 []
 
             else
-                [ E.on "mousedown" (offsetStart msg)
+                [ E.on "mousedown" (offsetStart s msg)
                 ]
 
-        eventArea =
-            rect
-                ([ setAttr A.x (mx x1)
-                 , setAttr A.y (my y2)
-                 , setAttr width (mx x2)
-                 , setAttr height (my y1)
-                 , fill "rgba(0,0,0,0.0)"
-                 ]
-                    ++ events
+
+listenClick : Box -> Listener -> (Listener -> a) -> Scalar -> List (Svg.Attribute a)
+listenClick box selected msg scalar =
+    let
+        click sel m =
+            Json.map2
+                (\x y ->
+                    let
+                        sel_ =
+                            { sel
+                                | scalar = Just scalar
+                                , mouseDown = False
+                                , box = box
+                                , clicked =
+                                    if sel.current == Nothing then
+                                        Just ( (x |> toFloat) - box.x, (y |> toFloat) - box.y )
+
+                                    else
+                                        Nothing
+                            }
+                    in
+                    msg (Listener sel_)
                 )
-                []
+                (Json.field "offsetX" Json.int)
+                (Json.field "offsetY" Json.int)
     in
-    eventArea
+    case selected of
+        Listener s ->
+            [ E.on "click" (click s msg) ]
 
 
-{-| When highlighting a selected region the application can have the selection contrainted to just the X axis or be free.
+listenHover : Box -> Listener -> (Listener -> a) -> Scalar -> List (Svg.Attribute a)
+listenHover box selected msg scalar =
+    let
+        click sel m =
+            Json.map2
+                (\x y ->
+                    let
+                        sel_ =
+                            { sel
+                                | scalar = Just scalar
+                                , box = box
+                                , hover = Just ( (x |> toFloat) - box.x, (y |> toFloat) - box.y )
+                            }
+                    in
+                    msg (Listener sel_)
+                )
+                (Json.field "offsetX" Json.int)
+                (Json.field "offsetY" Json.int)
+    in
+    case selected of
+        Listener s ->
+            [ E.on "mousemove" (click s msg) ]
 
-You would most likely use OnlyX when selecting a timeseries.
 
--}
-type Constraint
-    = FreeForm
-    | OnlyX
+eventArea : Scalar -> List (Svg.Attribute a) -> Svg a
+eventArea scalar events =
+    let
+        ( ( x1, y1 ), ( x2, y2 ) ) =
+            scalar.domain
+
+        ( mx, my ) =
+            scalar.range
+
+        ( ix, iy ) =
+            scalar.inverter
+    in
+    rect
+        ([ setAttr A.x (mx x1)
+         , setAttr A.y (my y2)
+         , setAttr width (mx x2)
+         , setAttr height (my y1)
+         , fill "rgba(0,0,0,0.0)"
+         ]
+            ++ events
+        )
+        []
 
 
-
--- | OnlyY
-
-
-highlight : Style a -> Constraint -> Listener -> Method a
+highlight : List (Svg.Attribute a) -> Constraint -> Listener -> Method a
 highlight style constraint selected _ _ scalar =
     case selected of
-        Select sel ->
+        Listener sel ->
             case ( sel.start, sel.current ) of
                 ( Just ( ax1, ay1 ), Just ( bx1, by1 ) ) ->
                     let
