@@ -1,7 +1,7 @@
 module Example exposing (main)
 
 import Browser
-import Charter exposing (Box, Element(..), Layer(..), Point, Size, chart, sparkline)
+import Charter exposing (Box, Layer(..), Point, Size, chart, sparkline)
 import Charter.Extras as Charter
 import Html as Html
 import Html.Attributes as HA
@@ -94,24 +94,24 @@ view model =
             , chart (Size 620 120)
                 [ Layer
                     (Box 600 70 10 10)
-                    [ Highlight [ Svg.fill "rgba(255,255,0,0.4)", Svg.stroke "rgba(0,0,0,0.2)", Svg.strokeWidth "0 2 0 2" ] Charter.OnlyX model.listener
+                    [ Charter.highlight [ Svg.fill "rgba(255,255,0,0.4)", Svg.stroke "rgba(0,0,0,0.2)", Svg.strokeWidth "0 2 0 2" ] Charter.OnlyX model.listener
                     ]
                 , Layer
                     (Box 600 50 10 10)
-                    [ OnClick model.listener Click
-                    , OnSelect model.listener Select
-                    , OnHover model.listener Hover
-                    , Line [ Svg.stroke "red" ] data0
-                    , Line [] data1
-                    , Dot [ Svg.r "5" ] (List.filterMap identity [ model.clicked ])
-                    , Dot [ Svg.fill "red", Svg.r "2" ] (List.filterMap identity [ nearestPoint data0 model.hover ])
-                    , Label [] (hoverLabel model.hover)
-                    , ZeroLine []
+                    [ Charter.onClick model.listener Click
+                    , Charter.onSelect model.listener Select
+                    , Charter.onHover model.listener Hover
+                    , Charter.line [ Svg.stroke "red" ] data0
+                    , Charter.line [] data1
+                    , Charter.dot [ Svg.r "5" ] (List.filterMap identity [ model.clicked ])
+                    , Charter.dot [ Svg.fill "red", Svg.r "2" ] (List.filterMap identity [ nearestPoint data0 model.hover ])
+                    , Charter.label [] (hoverLabel model.hover)
+                    , Charter.zeroLine []
                     ]
                 , Layer
                     (Box 600 20 10 60)
-                    [ Bar [] 2 data2
-                    , ZeroLine []
+                    [ Charter.bar [] 2 data2
+                    , Charter.zeroLine []
                     ]
                 , timeAxis (Box 600 10 10 80) 10 data0
                 ]
@@ -120,12 +120,12 @@ view model =
                     [ chart (Size 820 440)
                         [ Layer
                             (Box 800 380 10 10)
-                            [ Line [] (filter data0 model.listener)
-                            , Line [] (filter data1 model.listener)
-                            , ZeroLine []
+                            [ Charter.line [] (filter data0 model.listener)
+                            , Charter.line [] (filter data1 model.listener)
+                            , Charter.zeroLine []
                             ]
                         , Layer (Box 800 20 10 390)
-                            [ Area [ Svg.stroke "none", Svg.fill "rgb(150,150,255)" ] (filter data2 model.listener) ]
+                            [ Charter.area [ Svg.stroke "none", Svg.fill "rgb(150,150,255)" ] (filter data2 model.listener) ]
                         , timeAxis (Box 800 10 10 410) 10 (filter data1 model.listener)
                         ]
                     ]
@@ -135,10 +135,10 @@ view model =
             , Html.p []
                 [ Html.text "Here is a sparkline. "
                 , sparkline (Size 100 20)
-                    [ OnSelect model.listener2 Select2
-                    , Highlight [] Charter.OnlyX model.listener2
-                    , Line [] data0
-                    , Line [] data1
+                    [ Charter.onSelect model.listener2 Select2
+                    , Charter.highlight [] Charter.OnlyX model.listener2
+                    , Charter.line [] data0
+                    , Charter.line [] data1
                     ]
                 , Html.text " Click and drag on it for details."
                 , if Charter.selection model.listener2 /= Nothing then
@@ -152,9 +152,9 @@ view model =
                     Html.div []
                         [ chart (Size 620 140)
                             [ Layer (Box 600 100 10 10)
-                                [ Line [] a
-                                , Line [] b
-                                , ZeroLine []
+                                [ Charter.line [] a
+                                , Charter.line [] b
+                                , Charter.zeroLine []
                                 ]
                             , timeAxis (Charter.Box 600 10 10 110) 20 a
                             ]
@@ -217,9 +217,9 @@ timeAxis box ticks data =
                    )
     in
     Layer box
-        [ Domain [ ( x0, 0 ), ( x1, box.height ) ]
-        , Bar [] 1 times
-        , Label
+        [ Charter.domain [ ( x0, 0 ), ( x1, box.height ) ]
+        , Charter.bar [] 1 times
+        , Charter.label
             [ Svg.fontSize "10px", Svg.textAnchor "middle", Svg.transform "translate(0, 10)" ]
             (List.map (\( x, y ) -> ( ( x, y - 10 ), [], x |> fmtTime )) times)
         ]

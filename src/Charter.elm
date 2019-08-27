@@ -1,7 +1,10 @@
 module Charter exposing
-    ( sparkline, Size, Element(..), chart, Layer(..), Box, Constraint(..)
+    ( sparkline, Size, Element, chart, Layer(..), Box
     , Point, DataSet, LabelSet
-    , Listener, listener, subscribe, selection, clicked, hover
+    , line, area, dot, bar, label
+    , domain, zeroLine, highlight, Constraint(..)
+    , Listener, listener, subscribe, onSelect, onClick, onHover
+    , selection, clicked, hover
     )
 
 {-| This library is for generating inline graphs, called sparklines.
@@ -9,17 +12,60 @@ module Charter exposing
 
 # Definition
 
-@docs sparkline, Size, Element, chart, Layer, Box, Constraint
+@docs sparkline, Size, Element, chart, Layer, Box
 
 
-# Data types
+# Data
 
 @docs Point, DataSet, LabelSet
 
 
+# Drawing
+
+@docs line, area, dot, bar, label
+
+
+# Options
+
+@docs domain, zeroLine, highlight, Constraint
+
+
 # Events
 
-@docs Listener, listener, subscribe, selection, clicked, hover
+    type alias Model =
+        { listener : Charter.Listener
+        }
+
+    type Msg
+        = Select Charter.Listener
+        | Click Charter.Listener
+        | Hover Charter.Listener
+
+    chart (Size 620 120)
+        [ Layer
+            (Box 600 70 10 10)
+            [ highlight [ Svg.fill "rgba(255,255,0,0.4)" ]
+                OnlyX
+                model.listener
+            ]
+        , Layer
+            (Box 600 50 10 10)
+            [ Charter.onClick model.listener Click
+            , Charter.onSelect model.listener Select
+            , Charter.onHover model.listener Hover
+            , Charter.line [ Svg.stroke "red" ] data0
+            ]
+        ]
+
+@docs Listener, listener, subscribe, onSelect, onClick, onHover
+
+
+# Event Data
+
+Use the below functions to extract the data from events. The Point values
+returned are scaled to the input data, not the mouse events.
+
+@docs selection, clicked, hover
 
 -}
 
@@ -47,81 +93,6 @@ import Svg.Attributes as A
         , y
         )
 import Svg.Events as E
-
-
-{-| Drawing a chart or sparkline occurs by passing elements
-
-          -- data is tuples with (x,y) values as floats
-          data = [(0,0),(5,10),(10,12)]
-          data2 = [(0,-5),(7,2),(12,14)]
-
-          sparkline
-              (Size 100 10)    -- the width and height
-              [ Line [] data ] -- type of element to draw with SVG attributes and the data
-
-Multiple elements can be included to have muliple graphs. Each will have its data
-scaled relatively to one another. The graphs are drawn in the order they are
-given. So last graph will be drawn on top.
-
-          sparkline
-              (100,10)
-              [ Line [] data
-              , Line [Svg.stroke "red" ] data2
-              ]
-
-The three type of graphical elements are
-
-  - **Area** creates a graph meant to be filled
-  - **Bar** <BarWidth> Draws a bar graph. This requires defining what the width of the bar.
-  - **Dot** draws a dot at each point. Set the radius of the dot by styling it `[Svg.r "3"]`
-  - **Label** plots text on the graph
-  - **Line** creates a line graph
-
-There are also some options which can be applied to each graph:
-
-  - **Domain** includes the given data into the graph's domain.
-    This is useful when creating multiple graphs that need to have the same scale.
-  - **ZeroLine** param which will draw a line at the 0 y axis
-
-The charts support events as well:
-
-  - **OnSelect** Event for when a selection is made.
-  - **OnClick** Tracks click events.
-  - **OnHover** Tracks the mouse moving over the chart.
-
-**Examples**
-
-See Example.elm for more examples, including eventing.
-
-        -- style a ZeroLine to be very light
-        sparkline
-            ( 200, 5, 5, 5 )
-            [ ZeroLine [ Svg.strokeWidth "0.5", Svg.stroke "rgba(0,0,0,0.3)" ]
-            , Bar 20 [ ( 0, 2 ) , ( 10, 30 ) , ( 20, 10 ) ]
-            ]
-
-        -- graph the datasets to not be relative to one another.  The elements can be piped.
-        sparkline
-            ( 200, 10, 5, 5 )
-            [ Line data
-            , Line data2
-            ]
-
--}
-type Element a
-    = Area (List (Svg.Attribute a)) DataSet
-    | Bar (List (Svg.Attribute a)) Float DataSet
-    | Dot (List (Svg.Attribute a)) DataSet
-    | Label (List (Svg.Attribute a)) (LabelSet a)
-    | Line (List (Svg.Attribute a)) DataSet
-      -- options
-    | Domain DataSet
-    | Highlight (List (Svg.Attribute a)) Constraint Listener
-    | ZeroLine (List (Svg.Attribute a))
-      -- events
-    | OnSelect Listener (Listener -> a)
-    | OnClick Listener (Listener -> a)
-    | OnHover Listener (Listener -> a)
 
 
 {-| When highlighting a selected region the application can have the selection contrainted to just the X axis or be free.
@@ -152,10 +123,6 @@ type alias Size =
     }
 
 
-type alias Text =
-    String
-
-
 {-| Tuple of (x,y) value
 -}
 type alias Point =
@@ -171,7 +138,7 @@ type alias DataSet =
 {-| The data and text to use for labeling
 -}
 type alias LabelSet a =
-    List ( Point, List (Svg.Attribute a), Text )
+    List ( Point, List (Svg.Attribute a), String )
 
 
 type alias Range =
@@ -230,22 +197,35 @@ chart size layers =
         |> frame size
 
 
-{-| The entry point to create a graph. See Element.
+{-| Draws a simple chart.
+
+          -- data is tuples with (x,y) values as floats
+          data = [(0,0),(5,10),(10,12)]
+          data2 = [(0,-5),(7,2),(12,14)]
+
+          sparkline
+              (Size 100 10)    -- the width and height
+              [ line [] data ] -- type of element to draw with SVG attributes and the data
+
+Multiple elements can be included to have muliple graphs. Each will have its data
+scaled relatively to one another. The graphs are drawn in the order they are
+given. So last graph will be drawn on top.
+
+          sparkline
+              (100,10)
+              [ line [] data
+              , line [Svg.stroke "red" ] data2
+              ]
+
 -}
 sparkline : Size -> List (Element a) -> Svg a
 sparkline size elements =
     frame size [ convert (Box size.width size.height 0 0) elements ]
 
 
-{-| The entry point to create a graph. See Element.
--}
 convert : Box -> List (Element a) -> Svg a
-convert box elements =
+convert box sets =
     let
-        sets : List (LayerSet a)
-        sets =
-            List.map toLayerSet elements
-
         commands =
             sets
                 |> List.filterMap
@@ -262,7 +242,7 @@ convert box elements =
         domain_ =
             commands
                 |> List.concatMap (\token -> [ token.data ])
-                |> domain
+                |> domainCmd
 
         -- calc the range in the method, bar needs the size before calcing the range
         range_ : Range
@@ -300,7 +280,8 @@ convert box elements =
         |> layer box
 
 
-type LayerSet a
+{-| -}
+type Element a
     = Command (CommandSet a)
     | Event (EventSet a)
 
@@ -312,47 +293,103 @@ type alias CommandSet a =
     }
 
 
-toLayerSet : Element a -> LayerSet a
-toLayerSet msg =
-    case msg of
-        OnSelect listener_ eventMsg ->
-            EventSelect listener_ eventMsg |> Event
 
-        OnClick listener_ eventMsg ->
-            EventClick listener_ eventMsg |> Event
+-- DRAWING
 
-        OnHover listener_ eventMsg ->
-            EventHover listener_ eventMsg |> Event
 
-        Bar style width data ->
-            CommandSet (bar width) data style |> Command
+{-| Line creates a line chart
+-}
+line : List (Svg.Attribute a) -> DataSet -> Element a
+line attr data =
+    CommandSet lineCmd data attr |> Command
 
-        Dot style data ->
-            CommandSet dot data style |> Command
 
-        Line style data ->
-            CommandSet line data style |> Command
+{-| Area creates a graph meant to be filled
+-}
+area : List (Svg.Attribute a) -> DataSet -> Element a
+area attr data =
+    CommandSet lineCmd data attr |> Command
 
-        Area style data ->
-            CommandSet area data style |> Command
 
-        Domain data ->
-            CommandSet noop data [] |> Command
+{-| Dot draws a dot at each point. Set the radius of the dot by styling it `[Svg.r "3"]`
+-}
+dot : List (Svg.Attribute a) -> DataSet -> Element a
+dot attr data =
+    CommandSet dotCmd data attr |> Command
 
-        Label style labelSet ->
-            let
-                -- map out just the points to use as the underlying data
-                data =
-                    List.map (\( p, _, _ ) -> p) labelSet
-            in
-            CommandSet (label labelSet) data style |> Command
 
-        -- options
-        ZeroLine style ->
-            CommandSet zeroLine [] style |> Command
+{-| Bar draws a bar graph of a given width.
+-}
+bar : List (Svg.Attribute a) -> Float -> DataSet -> Element a
+bar attr width data =
+    CommandSet (barCmd width) data attr |> Command
 
-        Highlight style constraint sel ->
-            CommandSet (highlight style constraint sel) [] style |> Command
+
+{-| Label plots text on the graph
+-}
+label : List (Svg.Attribute a) -> LabelSet a -> Element a
+label attr labelSet =
+    let
+        -- map out just the points to use as the underlying data
+        data =
+            List.map (\( p, _, _ ) -> p) labelSet
+    in
+    CommandSet (labelCmd labelSet) data attr |> Command
+
+
+
+-- OPTIONS
+
+
+{-| Domain includes the given data into the graph's domain.
+This is useful when creating multiple graphs that need to have the same scale.
+-}
+domain : DataSet -> Element a
+domain data =
+    CommandSet noop data [] |> Command
+
+
+{-| Highlight is used to draw a region that has been selected. See `onSelect`
+-}
+highlight : List (Svg.Attribute a) -> Constraint -> Listener -> Element a
+highlight attr con l =
+    CommandSet (highlightCmd attr con l) [] attr |> Command
+
+
+{-| ZeroLine will draw a line at the 0 y axis
+-}
+zeroLine : List (Svg.Attribute a) -> Element a
+zeroLine attr =
+    CommandSet zeroLineCmd [] attr |> Command
+
+
+
+-- EVENTS
+
+
+{-| onSelect event for when a selection is made.
+-}
+onSelect : Listener -> (Listener -> a) -> Element a
+onSelect l msg =
+    EventSelect l msg |> Event
+
+
+{-| onHover tracks the mouse moving over the chart.
+-}
+onHover : Listener -> (Listener -> a) -> Element a
+onHover l msg =
+    EventHover l msg |> Event
+
+
+{-| onClick tracks click events.
+-}
+onClick : Listener -> (Listener -> a) -> Element a
+onClick l msg =
+    EventClick l msg |> Event
+
+
+
+-- MISC
 
 
 frame : Size -> List (Svg a) -> Svg a
@@ -373,13 +410,13 @@ layer box children =
         children
 
 
-zeroLine : Method a
-zeroLine _ attr scalar =
+zeroLineCmd : Method a
+zeroLineCmd _ attr scalar =
     let
         ( ( x1, _ ), ( x2, _ ) ) =
             scalar.domain
     in
-    line
+    lineCmd
         [ ( x1, 0 ), ( x2, 0 ) ]
         attr
         scalar
@@ -390,8 +427,8 @@ noop data attr _ =
     []
 
 
-line : Method a
-line data attr scalar =
+lineCmd : Method a
+lineCmd data attr scalar =
     [ Svg.path
         ([ fill "none"
          , stroke "#000"
@@ -404,8 +441,8 @@ line data attr scalar =
     ]
 
 
-area : Method a
-area data attr scalar =
+areaCmd : Method a
+areaCmd data attr scalar =
     let
         ( ( minx, miny ), ( maxx, maxy ) ) =
             scalar.domain
@@ -419,11 +456,11 @@ area data attr scalar =
         cappedData =
             [ p0 ] ++ data ++ [ p1 ]
     in
-    line cappedData attr scalar
+    lineCmd cappedData attr scalar
 
 
-dot : Method a
-dot data attr scalar =
+dotCmd : Method a
+dotCmd data attr scalar =
     data
         |> scale scalar.range
         |> List.map
@@ -439,8 +476,8 @@ dot data attr scalar =
             )
 
 
-bar : Float -> Method a
-bar w data attr scalar =
+barCmd : Float -> Method a
+barCmd w data attr scalar =
     let
         ( ( x0, y0 ), ( x1, y1 ) ) =
             scalar.domain
@@ -476,8 +513,8 @@ bar w data attr scalar =
             )
 
 
-label : LabelSet a -> Method a
-label labels data styled scalar =
+labelCmd : LabelSet a -> Method a
+labelCmd labels data styled scalar =
     let
         indexed =
             labels |> Array.fromList
@@ -533,8 +570,8 @@ path r data =
 -- FIXME BUG when domain min and max are equal
 
 
-domain : List DataSet -> Domain
-domain dataset =
+domainCmd : List DataSet -> Domain
+domainCmd dataset =
     let
         flatData =
             dataset |> List.concatMap (\s -> s)
@@ -660,7 +697,7 @@ listener =
     Listener (EventRecord False (Box 0 0 0 0) Nothing Nothing Nothing Nothing Nothing Nothing)
 
 
-{-| When tracking `OnSelect` a subscription will be required. The mouse events are tracked outside of the chart's SVG element.
+{-| When tracking `onSelect` a subscription will be required. The mouse events are tracked outside of the chart's SVG element.
 
         type alias Model =
             { listener : Listener }
@@ -924,8 +961,8 @@ eventArea scalar events =
         []
 
 
-highlight : List (Svg.Attribute a) -> Constraint -> Listener -> Method a
-highlight style constraint selected _ _ scalar =
+highlightCmd : List (Svg.Attribute a) -> Constraint -> Listener -> Method a
+highlightCmd style constraint selected _ _ scalar =
     case selected of
         Listener sel ->
             case ( sel.start, sel.current ) of
