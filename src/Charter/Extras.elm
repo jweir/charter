@@ -1,21 +1,15 @@
-module Charter.Extras exposing
-    ( Axes(..)
-    , minMax
-    )
+module Charter.Extras exposing (minMax, Axes(..), step, Step(..))
 
 {-| Additional functions to help in generating the graphs.
 
 
 # Definition
 
-@docs Axes
-
-
-# Functions
-
-@docs minMax
+@docs minMax, Axes, step, Step
 
 -}
+
+import Tuple
 
 
 y : ( Float, Float ) -> Float
@@ -44,10 +38,10 @@ minMax axes data =
         acc =
             case axes of
                 X ->
-                    Tuple.first
+                    x
 
                 Y ->
-                    Tuple.second
+                    y
     in
     data
         |> List.map acc
@@ -55,41 +49,38 @@ minMax axes data =
         |> (\( min, max ) -> ( Maybe.withDefault 0 min, Maybe.withDefault 0 max ))
 
 
-{-| returns the min and max Point on either the X or Y axes - not used currently
+{-| Defines where the step will occur
 -}
-extent : Axes -> List ( Float, Float ) -> List ( Float, Float )
-extent axes data =
+type Step
+    = Before
+    | After
+
+
+{-| step modifies the input data so it will be drawn with a step on the Y axis.
+-}
+step : Step -> List ( Float, Float ) -> List ( Float, Float )
+step msg points =
     let
-        getter =
-            case axes of
-                X ->
-                    x
+        stepFn : Maybe ( Float, Float ) -> ( Float, Float ) -> List ( Float, Float )
+        stepFn prev current =
+            case prev of
+                Nothing ->
+                    [ current ]
 
-                Y ->
-                    y
+                Just ( px, py ) ->
+                    case msg of
+                        Before ->
+                            [ ( px, y current ), current ]
+
+                        After ->
+                            [ ( x current, py ), current ]
     in
-    case List.head data of
-        Nothing ->
-            []
-
-        Just h ->
-            let
-                ( minv, maxv ) =
-                    List.foldr
-                        (\point ( min, max ) ->
-                            ( if getter point < getter min then
-                                point
-
-                              else
-                                min
-                            , if getter point > getter max then
-                                point
-
-                              else
-                                max
-                            )
-                        )
-                        ( h, h )
-                        data
-            in
-            [ minv, maxv ]
+    points
+        |> List.foldl
+            (\current ( prev, steppedPoints ) ->
+                ( Just current
+                , steppedPoints ++ stepFn prev current
+                )
+            )
+            ( Nothing, [] )
+        |> Tuple.second
