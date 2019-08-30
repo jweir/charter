@@ -688,7 +688,7 @@ type Listener
 
 
 type alias EventRecord =
-    { mouseDown : Bool
+    { mouse : Mouse
     , box : Box
     , scalar : Maybe Scalar
 
@@ -709,7 +709,28 @@ type alias EventRecord =
 -}
 listener : Listener
 listener =
-    Listener (EventRecord False (Box 0 0 0 0) Nothing Nothing Nothing Nothing Nothing Nothing)
+    Listener
+        { mouse = MouseInactive
+        , box = Box 0 0 0 0
+        , scalar = Nothing
+
+        -- the starting point on the page
+        , offset = Nothing
+        , start = Nothing
+
+        -- the bounding box in absolute size to the SVG graph
+        , current = Nothing
+
+        -- last clicked position
+        , clicked = Nothing
+        , hover = Nothing
+        }
+
+
+type Mouse
+    = MouseDown
+    | MouseDragging
+    | MouseInactive
 
 
 {-| When tracking `onSelect` a subscription will be required. The mouse events are tracked outside of the chart's SVG element.
@@ -748,13 +769,19 @@ subscribe listener_ eventMsg =
     Sub.batch <|
         case listener_ of
             Listener sel ->
-                if sel.mouseDown == True then
-                    [ Browser.onMouseMove (offsetPosition sel eventMsg)
-                    , Browser.onMouseUp (offsetPosition { sel | clicked = Nothing, mouseDown = False } eventMsg)
-                    ]
+                case sel.mouse of
+                    MouseInactive ->
+                        []
 
-                else
-                    []
+                    MouseDown ->
+                        [ Browser.onMouseMove (offsetPosition { sel | mouse = MouseDragging } eventMsg)
+                        , Browser.onMouseUp (Json.succeed ({ sel | clicked = Nothing, mouse = MouseInactive } |> Listener |> eventMsg))
+                        ]
+
+                    MouseDragging ->
+                        [ Browser.onMouseMove (offsetPosition sel eventMsg)
+                        , Browser.onMouseUp (offsetPosition { sel | clicked = Nothing, mouse = MouseInactive } eventMsg)
+                        ]
 
 
 {-| Clicked returns a point from a click event.
@@ -870,7 +897,7 @@ listenSelection box selected msg scalar =
                         sel_ =
                             { sel
                                 | scalar = Just scalar
-                                , mouseDown = True
+                                , mouse = MouseDown
                                 , box = box
                                 , offset =
                                     Just
@@ -890,12 +917,15 @@ listenSelection box selected msg scalar =
     in
     case selected of
         Listener s ->
-            if s.mouseDown == True then
-                []
+            case s.mouse of
+                MouseInactive ->
+                    [ E.on "mousedown" (offsetStart s msg) ]
 
-            else
-                [ E.on "mousedown" (offsetStart s msg)
-                ]
+                MouseDown ->
+                    []
+
+                MouseDragging ->
+                    []
 
 
 listenClick : Box -> Listener -> (Listener -> a) -> Scalar -> List (Svg.Attribute a)
@@ -908,7 +938,7 @@ listenClick box selected msg scalar =
                         sel_ =
                             { sel
                                 | scalar = Just scalar
-                                , mouseDown = False
+                                , mouse = MouseInactive
                                 , box = box
                                 , clicked =
                                     if sel.current == Nothing then

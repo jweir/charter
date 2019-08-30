@@ -99,9 +99,6 @@ view model =
                         Charter.OnlyX
                         model.listener
                     ]
-                , Layer (Box 600 60 10 10)
-                    [ Charter.line [] dataX
-                    ]
                 , Layer
                     (Box 600 50 10 10)
                     [ Charter.onClick model.listener Click

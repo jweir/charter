@@ -1,3 +1,6 @@
+# 1.1.2
+Fix clearing the selection
+
 # 1.1.1
 Use correct function for `area` and adjust the clamping logic.
 
