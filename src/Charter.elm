@@ -71,6 +71,7 @@ returned are scaled to the input data, not the mouse events.
 
 import Array
 import Browser.Events as Browser
+import Charter.Extras
 import Json.Decode as Json
 import Svg as Svg
     exposing
@@ -93,6 +94,7 @@ import Svg.Attributes as A
         , y
         )
 import Svg.Events as E
+import Svg.Lazy
 
 
 {-| When highlighting a selected region the application can have the selection contrainted to just the X axis or be free.
@@ -182,11 +184,11 @@ type Layer a
     chart (Size 620 120)
         [ Layer
             (Box 600 50 10 10)
-            [ Line [] data0
-            , ZeroLine []
+            [ line [] data0
+            , zeroLine []
             ]
         , Layer (Box 600 20 10 60)
-            [ Area [ Svg.stroke "none", Svg.fill "rgb(150,150,255)" ] data1 ]
+            [ area [ Svg.stroke "none", Svg.fill "rgb(150,150,255)" ] data1 ]
         ]
 
 -}
@@ -308,7 +310,7 @@ line attr data =
 -}
 area : List (Svg.Attribute a) -> DataSet -> Element a
 area attr data =
-    CommandSet lineCmd data attr |> Command
+    CommandSet areaCmd data attr |> Command
 
 
 {-| Dot draws a dot at each point. Set the radius of the dot by styling it `[Svg.r "3"]`
@@ -427,9 +429,9 @@ noop data attr _ =
     []
 
 
-lineCmd : Method a
-lineCmd data attr scalar =
-    [ Svg.path
+lineLazy : DataSet -> List (Svg.Attribute a) -> Scalar -> Svg.Svg a
+lineLazy data attr scalar =
+    Svg.path
         ([ fill "none"
          , stroke "#000"
          , setAttr strokeWidth 1
@@ -438,20 +440,33 @@ lineCmd data attr scalar =
             ++ attr
         )
         []
-    ]
+
+
+lineCmd : Method a
+lineCmd data attr scalar =
+    [ lineLazy data attr scalar ]
 
 
 areaCmd : Method a
 areaCmd data attr scalar =
     let
-        ( ( minx, miny ), ( maxx, maxy ) ) =
+        ( ( _, miny ), ( _, maxy ) ) =
             scalar.domain
 
+        ( minx, maxx ) =
+            Charter.Extras.minMax Charter.Extras.X data
+
+        ( dyMin, dyMax ) =
+            Charter.Extras.minMax Charter.Extras.Y data
+
+        y =
+            max (min dyMin 0) miny
+
         p0 =
-            ( minx, miny )
+            ( minx, y )
 
         p1 =
-            ( maxx, miny )
+            ( maxx, y )
 
         cappedData =
             [ p0 ] ++ data ++ [ p1 ]

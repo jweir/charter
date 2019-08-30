@@ -94,7 +94,13 @@ view model =
             , chart (Size 620 120)
                 [ Layer
                     (Box 600 70 10 10)
-                    [ Charter.highlight [ Svg.fill "rgba(255,255,0,0.4)", Svg.stroke "rgba(0,0,0,0.2)", Svg.strokeWidth "0 2 0 2" ] Charter.OnlyX model.listener
+                    [ Charter.highlight
+                        [ Svg.fill "rgba(255,255,0,0.4)", Svg.stroke "rgba(0,0,0,0.2)", Svg.strokeWidth "0 2 0 2" ]
+                        Charter.OnlyX
+                        model.listener
+                    ]
+                , Layer (Box 600 60 10 10)
+                    [ Charter.line [] dataX
                     ]
                 , Layer
                     (Box 600 50 10 10)
@@ -224,6 +230,27 @@ timeAxis box ticks data =
             [ Svg.fontSize "10px", Svg.textAnchor "middle", Svg.transform "translate(0, 10)" ]
             (List.map (\( x, y ) -> ( ( x, y - 10 ), [], x |> fmtTime )) times)
         ]
+
+
+dataX : List Point
+dataX =
+    let
+        ( x0, x1 ) =
+            Charter.minMax Charter.X data0
+
+        steps =
+            100000
+
+        step =
+            (x1 - x0) / steps
+    in
+    List.range 0 steps
+        |> List.map
+            (\v ->
+                ( x0 + (toFloat v * step)
+                , toFloat v
+                )
+            )
 
 
 data0 : List Point

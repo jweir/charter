@@ -1,3 +1,5 @@
+# 1.1.1
+Use correct function for `area` and adjust the clamping logic.
 
 # 1.1.0
 Added step function in Chater.Extra
