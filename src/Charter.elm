@@ -94,7 +94,6 @@ import Svg.Attributes as A
         , y
         )
 import Svg.Events as E
-import Svg.Lazy
 
 
 {-| When highlighting a selected region the application can have the selection contrainted to just the X axis or be free.
