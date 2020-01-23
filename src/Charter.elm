@@ -269,7 +269,7 @@ convert box sets =
                             Event e ->
                                 Just (listen box e scalar)
 
-                            Command s ->
+                            Command _ ->
                                 Nothing
                     )
                 |> List.concatMap identity
@@ -424,7 +424,7 @@ zeroLineCmd _ attr scalar =
 
 
 noop : Method a
-noop data attr _ =
+noop _ _ _ =
     []
 
 
@@ -449,13 +449,13 @@ lineCmd data attr scalar =
 areaCmd : Method a
 areaCmd data attr scalar =
     let
-        ( ( _, miny ), ( _, maxy ) ) =
+        ( ( _, miny ), _ ) =
             scalar.domain
 
         ( minx, maxx ) =
             Charter.Extras.minMax Charter.Extras.X data
 
-        ( dyMin, dyMax ) =
+        ( dyMin, _ ) =
             Charter.Extras.minMax Charter.Extras.Y data
 
         y =
@@ -468,7 +468,7 @@ areaCmd data attr scalar =
             ( maxx, y )
 
         cappedData =
-            [ p0 ] ++ data ++ [ p1 ]
+            p0 :: data ++ [ p1 ]
     in
     lineCmd cappedData attr scalar
 
@@ -493,7 +493,7 @@ dotCmd data attr scalar =
 barCmd : Float -> Method a
 barCmd w data attr scalar =
     let
-        ( ( x0, y0 ), ( x1, y1 ) ) =
+        ( ( x0, _ ), ( x1, _ ) ) =
             scalar.domain
 
         ( mx, my ) =
@@ -543,7 +543,7 @@ labelCmd labels data styled scalar =
                     Nothing ->
                         []
 
-                    Just ( p, attr, label_ ) ->
+                    Just ( _, attr, label_ ) ->
                         [ Svg.text_
                             ([ setAttr A.x x
                              , setAttr A.y y
@@ -643,12 +643,11 @@ invert box ( ( x0, y0 ), ( x1, y1 ) ) =
 -}
 noNan : Float -> Float
 noNan f =
-    case isNaN f of
-        True ->
-            0
+    if isNaN f then
+        0
 
-        False ->
-            f
+    else
+        f
 
 
 scale : Range -> DataSet -> DataSet
@@ -787,22 +786,17 @@ subscribe listener_ eventMsg =
 -}
 clicked : Listener -> Maybe Point
 clicked (Listener sel) =
-    case sel.scalar of
-        Nothing ->
+    case ( sel.scalar, sel.clicked ) of
+        ( Just scalar, Just ( x, y ) ) ->
+            let
+                ( ix, iy ) =
+                    scalar.inverter
+            in
+            Just
+                ( ix x, iy (y - sel.box.height |> abs) )
+
+        _ ->
             Nothing
-
-        Just scalar ->
-            case sel.clicked of
-                Just ( x, y ) ->
-                    let
-                        ( ix, iy ) =
-                            scalar.inverter
-                    in
-                    Just
-                        ( ix x, iy (y - sel.box.height |> abs) )
-
-                _ ->
-                    Nothing
 
 
 {-| Hover returns a point from a hover event.
@@ -838,37 +832,26 @@ Use this selection to filter the applications data into a subset.
 
 -}
 selection : Listener -> Maybe ( Point, Point )
-selection l =
-    let
-        sel =
-            case l of
-                Listener sel_ ->
-                    sel_
-    in
-    case sel.scalar of
-        Nothing ->
+selection (Listener sel) =
+    case ( sel.scalar, sel.start, sel.current ) of
+        ( Just scalar, Just ( dx0, dy0 ), Just ( dx1, dy1 ) ) ->
+            let
+                ( ix, iy ) =
+                    scalar.inverter
+
+                ( bx0, by0 ) =
+                    ( ix dx0, iy (dy0 - sel.box.height |> abs) )
+
+                ( bx1, by1 ) =
+                    ( ix dx1, iy (dy1 - sel.box.height |> abs) )
+            in
+            Just
+                ( ( min bx0 bx1, min by0 by1 )
+                , ( max bx0 bx1, max by0 by1 )
+                )
+
+        _ ->
             Nothing
-
-        Just scalar ->
-            case ( sel.start, sel.current ) of
-                ( Just ( dx0, dy0 ), Just ( dx1, dy1 ) ) ->
-                    let
-                        ( ix, iy ) =
-                            scalar.inverter
-
-                        ( bx0, by0 ) =
-                            ( ix dx0, iy (dy0 - sel.box.height |> abs) )
-
-                        ( bx1, by1 ) =
-                            ( ix dx1, iy (dy1 - sel.box.height |> abs) )
-                    in
-                    Just
-                        ( ( min bx0 bx1, min by0 by1 )
-                        , ( max bx0 bx1, max by0 by1 )
-                        )
-
-                _ ->
-                    Nothing
 
 
 {-| TODO support mousemove when outside of the region, this will probably require a subscription
@@ -889,7 +872,7 @@ listen box eventSet scalar =
 listenSelection : Box -> Listener -> (Listener -> a) -> Scalar -> List (Svg.Attribute a)
 listenSelection box selected msg scalar =
     let
-        offsetStart sel m =
+        offsetStart sel _ =
             Json.map4
                 (\oX oY x y ->
                     let
@@ -930,7 +913,7 @@ listenSelection box selected msg scalar =
 listenClick : Box -> Listener -> (Listener -> a) -> Scalar -> List (Svg.Attribute a)
 listenClick box selected msg scalar =
     let
-        click sel m =
+        click sel _ =
             Json.map2
                 (\x y ->
                     let
@@ -960,7 +943,7 @@ listenClick box selected msg scalar =
 listenHover : Box -> Listener -> (Listener -> a) -> Scalar -> List (Svg.Attribute a)
 listenHover box selected msg scalar =
     let
-        click sel m =
+        click sel _ =
             Json.map2
                 (\x y ->
                     let
@@ -989,9 +972,6 @@ eventArea scalar events =
 
         ( mx, my ) =
             scalar.range
-
-        ( ix, iy ) =
-            scalar.inverter
     in
     rect
         ([ setAttr A.x (mx x1)
