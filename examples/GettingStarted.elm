@@ -1,21 +1,5 @@
-# Charter
+module GettingStarted exposing (main)
 
-A package for quickly line charts and a few other charts.
-Supports eventing for selecting data within a chart.
-
-See `examples/Example.elm` for more detailed example with events.
-
-## Getting Started
-
-```
-elm install jweir/charter
-```
-
-The below code will render just a line graph and a Y axis.
-
-![](/source/jweir/charter/1.1.2/examples/GettingStarted.png)
-
-```
 import Charter
 import Svg.Attributes as Svg
 
@@ -129,9 +113,3 @@ foo =
             -- I
             |> List.reverse
         )
-```
-
-## TODO
-
-- Layers and Domains
-- Interaction
