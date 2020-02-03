@@ -266,8 +266,25 @@ convert box sets =
                 |> List.filterMap
                     (\set ->
                         case set of
-                            Event e ->
-                                Just (listen box e scalar)
+                            Event eventSet ->
+                                Just <|
+                                    case eventSet of
+                                        EventSelect (Listener listener_) msg ->
+                                            case listener_.mouse of
+                                                MouseInactive ->
+                                                    [ E.on "mousedown" (decodeSelection (Listener listener_) box scalar msg) ]
+
+                                                MouseDown ->
+                                                    []
+
+                                                MouseDragging ->
+                                                    []
+
+                                        EventClick listener_ msg ->
+                                            [ E.on "click" (decodeClick listener_ box scalar msg) ]
+
+                                        EventHover listener_ msg ->
+                                            [ E.on "mousemove" (decodeMove listener_ box scalar msg) ]
 
                             Command _ ->
                                 Nothing
@@ -744,56 +761,36 @@ type Mouse
 
 -}
 subscribe : Listener -> (Listener -> a) -> Sub a
-subscribe listener_ eventMsg =
-    let
-        offsetPosition : EventRecord -> (Listener -> a) -> Json.Decoder a
-        offsetPosition sel msg =
-            case sel.offset of
-                Nothing ->
-                    Json.succeed (msg (Listener sel))
+subscribe (Listener listener_) eventMsg =
+    Sub.batch
+        (case listener_.mouse of
+            MouseInactive ->
+                []
 
-                Just ( x0, y0 ) ->
-                    Json.map2
-                        (\x y ->
-                            let
-                                sel_ =
-                                    { sel | current = Just ( (x |> toFloat) - x0, (y |> toFloat) - y0 ) }
-                            in
-                            Listener sel_ |> msg
-                        )
-                        (Json.field "pageX" Json.int)
-                        (Json.field "pageY" Json.int)
-    in
-    Sub.batch <|
-        case listener_ of
-            Listener sel ->
-                case sel.mouse of
-                    MouseInactive ->
-                        []
+            MouseDown ->
+                [ Browser.onMouseMove (offsetPosition { listener_ | mouse = MouseDragging } eventMsg)
+                , Browser.onMouseUp (Json.succeed ({ listener_ | clicked = Nothing, mouse = MouseInactive } |> Listener |> eventMsg))
+                ]
 
-                    MouseDown ->
-                        [ Browser.onMouseMove (offsetPosition { sel | mouse = MouseDragging } eventMsg)
-                        , Browser.onMouseUp (Json.succeed ({ sel | clicked = Nothing, mouse = MouseInactive } |> Listener |> eventMsg))
-                        ]
-
-                    MouseDragging ->
-                        [ Browser.onMouseMove (offsetPosition sel eventMsg)
-                        , Browser.onMouseUp (offsetPosition { sel | clicked = Nothing, mouse = MouseInactive } eventMsg)
-                        ]
+            MouseDragging ->
+                [ Browser.onMouseMove (offsetPosition listener_ eventMsg)
+                , Browser.onMouseUp (offsetPosition { listener_ | clicked = Nothing, mouse = MouseInactive } eventMsg)
+                ]
+        )
 
 
 {-| Clicked returns a point from a click event.
 -}
 clicked : Listener -> Maybe Point
-clicked (Listener sel) =
-    case ( sel.scalar, sel.clicked ) of
+clicked (Listener listener_) =
+    case ( listener_.scalar, listener_.clicked ) of
         ( Just scalar, Just ( x, y ) ) ->
             let
                 ( ix, iy ) =
                     scalar.inverter
             in
             Just
-                ( ix x, iy (y - sel.box.height |> abs) )
+                ( ix x, iy (y - listener_.box.height |> abs) )
 
         _ ->
             Nothing
@@ -802,15 +799,15 @@ clicked (Listener sel) =
 {-| Hover returns a point from a hover event.
 -}
 hover : Listener -> Maybe Point
-hover (Listener sel) =
-    case ( sel.scalar, sel.hover ) of
+hover (Listener listener_) =
+    case ( listener_.scalar, listener_.hover ) of
         ( Just scalar, Just ( x, y ) ) ->
             let
                 ( ix, iy ) =
                     scalar.inverter
             in
             Just
-                ( ix x, iy (y - sel.box.height |> abs) )
+                ( ix x, iy (y - listener_.box.height |> abs) )
 
         _ ->
             Nothing
@@ -832,18 +829,18 @@ Use this selection to filter the applications data into a subset.
 
 -}
 selection : Listener -> Maybe ( Point, Point )
-selection (Listener sel) =
-    case ( sel.scalar, sel.start, sel.current ) of
+selection (Listener listener_) =
+    case ( listener_.scalar, listener_.start, listener_.current ) of
         ( Just scalar, Just ( dx0, dy0 ), Just ( dx1, dy1 ) ) ->
             let
                 ( ix, iy ) =
                     scalar.inverter
 
                 ( bx0, by0 ) =
-                    ( ix dx0, iy (dy0 - sel.box.height |> abs) )
+                    ( ix dx0, iy (dy0 - listener_.box.height |> abs) )
 
                 ( bx1, by1 ) =
-                    ( ix dx1, iy (dy1 - sel.box.height |> abs) )
+                    ( ix dx1, iy (dy1 - listener_.box.height |> abs) )
             in
             Just
                 ( ( min bx0 bx1, min by0 by1 )
@@ -854,114 +851,92 @@ selection (Listener sel) =
             Nothing
 
 
-{-| TODO support mousemove when outside of the region, this will probably require a subscription
--}
-listen : Box -> EventSet a -> Scalar -> List (Svg.Attribute a)
-listen box eventSet scalar =
-    case eventSet of
-        EventSelect listener_ msg ->
-            listenSelection box listener_ msg scalar
+offsetPosition : EventRecord -> (Listener -> a) -> Json.Decoder a
+offsetPosition listener_ msg =
+    case listener_.offset of
+        Nothing ->
+            Json.succeed (msg (Listener listener_))
 
-        EventClick listener_ msg ->
-            listenClick box listener_ msg scalar
-
-        EventHover listener_ msg ->
-            listenHover box listener_ msg scalar
-
-
-listenSelection : Box -> Listener -> (Listener -> a) -> Scalar -> List (Svg.Attribute a)
-listenSelection box selected msg scalar =
-    let
-        offsetStart sel _ =
-            Json.map4
-                (\oX oY x y ->
+        Just ( x0, y0 ) ->
+            Json.map2
+                (\x y ->
                     let
                         sel_ =
-                            { sel
-                                | scalar = Just scalar
-                                , mouse = MouseDown
-                                , box = box
-                                , offset =
-                                    Just
-                                        ( ((oX - x) |> toFloat) + box.x, ((oY - y) |> toFloat) + box.y )
-                                , start =
-                                    Just
-                                        ( (x |> toFloat) - box.x, (y |> toFloat) - box.y )
-                                , current = Nothing
-                            }
+                            { listener_ | current = Just ( (x |> toFloat) - x0, (y |> toFloat) - y0 ) }
                     in
-                    msg (Listener sel_)
+                    Listener sel_ |> msg
                 )
                 (Json.field "pageX" Json.int)
                 (Json.field "pageY" Json.int)
-                (Json.field "offsetX" Json.int)
-                (Json.field "offsetY" Json.int)
-    in
-    case selected of
-        Listener s ->
-            case s.mouse of
-                MouseInactive ->
-                    [ E.on "mousedown" (offsetStart s msg) ]
-
-                MouseDown ->
-                    []
-
-                MouseDragging ->
-                    []
 
 
-listenClick : Box -> Listener -> (Listener -> a) -> Scalar -> List (Svg.Attribute a)
-listenClick box selected msg scalar =
-    let
-        click sel _ =
-            Json.map2
-                (\x y ->
-                    let
-                        sel_ =
-                            { sel
-                                | scalar = Just scalar
-                                , mouse = MouseInactive
-                                , box = box
-                                , clicked =
-                                    if sel.current == Nothing then
-                                        Just ( (x |> toFloat) - box.x, (y |> toFloat) - box.y )
-
-                                    else
-                                        Nothing
-                            }
-                    in
-                    msg (Listener sel_)
-                )
-                (Json.field "offsetX" Json.int)
-                (Json.field "offsetY" Json.int)
-    in
-    case selected of
-        Listener s ->
-            [ E.on "click" (click s msg) ]
+decodeSelection : Listener -> Box -> Scalar -> (Listener -> msg) -> Json.Decoder msg
+decodeSelection (Listener listener_) box scalar msg =
+    Json.map4
+        (\oX oY x y ->
+            let
+                sel_ =
+                    { listener_
+                        | scalar = Just scalar
+                        , mouse = MouseDown
+                        , box = box
+                        , offset =
+                            Just
+                                ( ((oX - x) |> toFloat) + box.x, ((oY - y) |> toFloat) + box.y )
+                        , start =
+                            Just
+                                ( (x |> toFloat) - box.x, (y |> toFloat) - box.y )
+                        , current = Nothing
+                    }
+            in
+            msg (Listener sel_)
+        )
+        (Json.field "pageX" Json.int)
+        (Json.field "pageY" Json.int)
+        (Json.field "offsetX" Json.int)
+        (Json.field "offsetY" Json.int)
 
 
-listenHover : Box -> Listener -> (Listener -> a) -> Scalar -> List (Svg.Attribute a)
-listenHover box selected msg scalar =
-    let
-        click sel _ =
-            Json.map2
-                (\x y ->
-                    let
-                        sel_ =
-                            { sel
-                                | scalar = Just scalar
-                                , box = box
-                                , hover = Just ( (x |> toFloat) - box.x, (y |> toFloat) - box.y )
-                            }
-                    in
-                    msg (Listener sel_)
-                )
-                (Json.field "offsetX" Json.int)
-                (Json.field "offsetY" Json.int)
-    in
-    case selected of
-        Listener s ->
-            [ E.on "mousemove" (click s msg) ]
+decodeClick : Listener -> Box -> Scalar -> (Listener -> msg) -> Json.Decoder msg
+decodeClick (Listener listener_) box scalar msg =
+    Json.map2
+        (\x y ->
+            let
+                sel_ =
+                    { listener_
+                        | scalar = Just scalar
+                        , mouse = MouseInactive
+                        , box = box
+                        , clicked =
+                            if listener_.current == Nothing then
+                                Just ( (x |> toFloat) - box.x, (y |> toFloat) - box.y )
+
+                            else
+                                Nothing
+                    }
+            in
+            msg (Listener sel_)
+        )
+        (Json.field "offsetX" Json.int)
+        (Json.field "offsetY" Json.int)
+
+
+decodeMove : Listener -> Box -> Scalar -> (Listener -> msg) -> Json.Decoder msg
+decodeMove (Listener listener_) box scalar msg =
+    Json.map2
+        (\x y ->
+            let
+                sel_ =
+                    { listener_
+                        | scalar = Just scalar
+                        , box = box
+                        , hover = Just ( (x |> toFloat) - box.x, (y |> toFloat) - box.y )
+                    }
+            in
+            msg (Listener sel_)
+        )
+        (Json.field "offsetX" Json.int)
+        (Json.field "offsetY" Json.int)
 
 
 eventArea : Scalar -> List (Svg.Attribute a) -> Svg a
@@ -988,8 +963,8 @@ eventArea scalar events =
 highlightCmd : List (Svg.Attribute a) -> Constraint -> Listener -> Method a
 highlightCmd style constraint selected _ _ scalar =
     case selected of
-        Listener sel ->
-            case ( sel.start, sel.current ) of
+        Listener listener_ ->
+            case ( listener_.start, listener_.current ) of
                 ( Just ( ax1, ay1 ), Just ( bx1, by1 ) ) ->
                     let
                         box =
