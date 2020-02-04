@@ -94,6 +94,7 @@ import Svg.Attributes as A
         , y
         )
 import Svg.Events as E
+import Svg.Lazy as Svg
 
 
 {-| When highlighting a selected region the application can have the selection contrainted to just the X axis or be free.
@@ -295,7 +296,7 @@ convert box sets =
         |> List.concatMap collector
         -- add the events to the end, so it is on top of the other elements
         |> (\list -> list ++ [ eventArea scalar events ])
-        |> layer box
+        |> Svg.lazy2 layer box
 
 
 {-| -}
