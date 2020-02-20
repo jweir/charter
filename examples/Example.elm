@@ -180,21 +180,20 @@ hoverLabel point =
 
 nearestPoint : List Point -> Maybe Point -> Maybe Point
 nearestPoint points point =
-    case point of
-        Nothing ->
-            Nothing
+    point
+        |> Maybe.andThen
+            (\( x0, _ ) ->
+                points
+                    |> List.foldr
+                        (\( x, y ) p ->
+                            if x0 < x then
+                                Just ( x, y )
 
-        Just ( x0, _ ) ->
-            points
-                |> List.foldr
-                    (\( x, y ) p ->
-                        if x0 < x then
-                            Just ( x, y )
-
-                        else
-                            p
-                    )
-                    Nothing
+                            else
+                                p
+                        )
+                        Nothing
+            )
 
 
 timeAxis : Charter.Box -> Int -> Charter.DataSet -> Charter.Layer Msg
@@ -227,27 +226,6 @@ timeAxis box ticks data =
             [ Svg.fontSize "10px", Svg.textAnchor "middle", Svg.transform "translate(0, 10)" ]
             (List.map (\( x, y ) -> ( ( x, y - 10 ), [], x |> fmtTime )) times)
         ]
-
-
-dataX : List Point
-dataX =
-    let
-        ( x0, x1 ) =
-            Charter.minMax Charter.X data0
-
-        steps =
-            100000
-
-        step =
-            (x1 - x0) / steps
-    in
-    List.range 0 steps
-        |> List.map
-            (\v ->
-                ( x0 + (toFloat v * step)
-                , toFloat v
-                )
-            )
 
 
 data0 : List Point
