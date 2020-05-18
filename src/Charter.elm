@@ -4,7 +4,7 @@ module Charter exposing
     , line, area, dot, bar, label
     , domain, zeroLine, highlight, Constraint(..)
     , Listener, listener, subscribe, onSelect, onClick, onHover
-    , selection, clicked, hover
+    , selection, clicked, hover, active
     )
 
 {-| This library is for generating inline graphs, called sparklines.
@@ -65,7 +65,7 @@ module Charter exposing
 Use the below functions to extract the data from events. The Point values
 returned are scaled to the input data, not the mouse events.
 
-@docs selection, clicked, hover
+@docs selection, clicked, hover, active
 
 -}
 
@@ -812,6 +812,21 @@ hover (Listener listener_) =
 
         _ ->
             Nothing
+
+
+{-| Hover returns a point from a hover event.
+-}
+active : Listener -> Bool
+active (Listener listener_) =
+    case listener_.mouse of
+        MouseInactive ->
+            False
+
+        MouseDown ->
+            True
+
+        MouseDragging ->
+            True
 
 
 {-| Selection returns a box with the selected boundaries of the data.

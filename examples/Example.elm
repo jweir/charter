@@ -90,7 +90,14 @@ view : Model -> Html.Html Msg
 view model =
     Html.div []
         [ Html.div []
-            [ Html.p [] [ Html.text "Mouse over, click and click and drag the below chart for example interactions" ]
+            [ Html.p []
+                [ Html.text "Mouse over, click and click and drag the below chart for example interactions"
+                , if Charter.active model.listener == True then
+                    Html.text " (mouse is down)"
+
+                  else
+                    Html.text " (mouse is up)"
+                ]
             , chart (Size 620 120)
                 [ Layer
                     (Box 600 70 10 10)

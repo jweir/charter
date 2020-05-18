@@ -1,3 +1,7 @@
+# 1.2.0
+
+Charter.active returns true when the mouse is down over a listening Layer.
+
 # 1.1.4
 
 Use Svg.Lazy for rendering the layer
