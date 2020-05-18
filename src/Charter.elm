@@ -195,7 +195,7 @@ type Layer a
 chart : Size -> List (Layer a) -> Svg a
 chart size layers =
     layers
-        |> List.map (\(Layer box elements) -> convert box elements)
+        |> List.map (\(Layer box elements) -> Svg.lazy5 convert box.width box.height box.x box.y elements)
         |> frame size
 
 
@@ -222,12 +222,15 @@ given. So last graph will be drawn on top.
 -}
 sparkline : Size -> List (Element a) -> Svg a
 sparkline size elements =
-    frame size [ convert (Box size.width size.height 0 0) elements ]
+    frame size [ Svg.lazy5 convert size.width size.height 0 0 elements ]
 
 
-convert : Box -> List (Element a) -> Svg a
-convert box sets =
+convert : Float -> Float -> Float -> Float -> List (Element a) -> Svg a
+convert width height x y sets =
     let
+        box =
+            Box width height x y
+
         commands =
             sets
                 |> List.filterMap
@@ -296,7 +299,7 @@ convert box sets =
         |> List.concatMap collector
         -- add the events to the end, so it is on top of the other elements
         |> (\list -> list ++ [ eventArea scalar events ])
-        |> Svg.lazy2 layer box
+        |> layer box
 
 
 {-| -}
@@ -423,8 +426,13 @@ frame size children =
 
 layer : Box -> List (Svg a) -> Svg a
 layer box children =
+    Svg.lazy3 lazyLayer box.x box.y children
+
+
+lazyLayer : Float -> Float -> List (Svg a) -> Svg a
+lazyLayer x y children =
     Svg.g
-        [ A.transform ("translate(" ++ String.fromFloat box.x ++ "," ++ String.fromFloat box.y ++ ")")
+        [ A.transform ("translate(" ++ String.fromFloat x ++ "," ++ String.fromFloat y ++ ")")
         ]
         children
 
@@ -446,9 +454,9 @@ noop _ _ _ =
     []
 
 
-lineLazy : DataSet -> List (Svg.Attribute a) -> Scalar -> Svg.Svg a
-lineLazy data attr scalar =
-    Svg.path
+lineCmd : Method a
+lineCmd data attr scalar =
+    [ Svg.path
         ([ fill "none"
          , stroke "#000"
          , setAttr strokeWidth 1
@@ -457,11 +465,7 @@ lineLazy data attr scalar =
             ++ attr
         )
         []
-
-
-lineCmd : Method a
-lineCmd data attr scalar =
-    [ lineLazy data attr scalar ]
+    ]
 
 
 areaCmd : Method a
