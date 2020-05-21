@@ -271,29 +271,48 @@ convert width height x y sets =
                     (\set ->
                         case set of
                             Event eventSet ->
-                                Just <|
-                                    case eventSet of
-                                        EventSelect (Listener listener_) msg ->
-                                            case listener_.mouse of
-                                                MouseInactive ->
-                                                    [ E.on "mousedown" (decodeSelection (Listener listener_) box scalar msg) ]
+                                case eventSet of
+                                    EventSelect (Listener listener_) msg ->
+                                        case listener_.mouse of
+                                            MouseInactive ->
+                                                Just <|
+                                                    E.on "mousedown"
+                                                        (decodeSelection
+                                                            (Listener listener_ |> rescaleListener scalar)
+                                                            box
+                                                            scalar
+                                                            msg
+                                                        )
 
-                                                MouseDown ->
-                                                    []
+                                            MouseDown ->
+                                                Nothing
 
-                                                MouseDragging ->
-                                                    []
+                                            MouseDragging ->
+                                                Nothing
 
-                                        EventClick listener_ msg ->
-                                            [ E.on "click" (decodeClick listener_ box scalar msg) ]
+                                    EventClick listener_ msg ->
+                                        Just <|
+                                            E.on "click"
+                                                (decodeClick
+                                                    (listener_ |> rescaleListener scalar)
+                                                    box
+                                                    scalar
+                                                    msg
+                                                )
 
-                                        EventHover listener_ msg ->
-                                            [ E.on "mousemove" (decodeMove listener_ box scalar msg) ]
+                                    EventHover listener_ msg ->
+                                        Just <|
+                                            E.on "mousemove"
+                                                (decodeMove
+                                                    (listener_ |> rescaleListener scalar)
+                                                    box
+                                                    scalar
+                                                    msg
+                                                )
 
                             Command _ ->
                                 Nothing
                     )
-                |> List.concatMap identity
     in
     commands
         |> List.concatMap collector
@@ -980,11 +999,41 @@ eventArea scalar events =
         []
 
 
+
+-- the graph size changed since the highlight was created, we need to fix it
+
+
+rescaleListener : Scalar -> Listener -> Listener
+rescaleListener scalar (Listener l) =
+    Listener <|
+        case l.scalar of
+            Nothing ->
+                l
+
+            Just s ->
+                let
+                    xScale =
+                        scalar.box.width / s.box.width
+
+                    yScale =
+                        scalar.box.height / s.box.height
+
+                    map maybePoint =
+                        case maybePoint of
+                            Nothing ->
+                                Nothing
+
+                            Just ( x, y ) ->
+                                Just ( x * xScale, y * yScale )
+                in
+                { l | current = map l.current, start = map l.start }
+
+
 highlightCmd : List (Svg.Attribute a) -> Constraint -> Listener -> Method a
-highlightCmd style constraint selected _ _ scalar =
-    case selected of
-        Listener listener_ ->
-            case ( listener_.start, listener_.current ) of
+highlightCmd style constraint listener_ _ _ scalar =
+    case rescaleListener scalar listener_ of
+        Listener l ->
+            case ( l.start, l.current ) of
                 ( Just ( ax1, ay1 ), Just ( bx1, by1 ) ) ->
                     let
                         box =

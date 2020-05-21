@@ -5,6 +5,7 @@ import Charter exposing (Box, Layer(..), Point, Size, chart, sparkline)
 import Charter.Extras as Charter
 import Html as Html
 import Html.Attributes as HA
+import Html.Events as HE
 import Svg
 import Svg.Attributes as Svg
 import Time
@@ -15,7 +16,13 @@ type alias Model =
     , listener2 : Charter.Listener
     , clicked : Maybe Point
     , hover : Maybe Point
+    , width : Size
     }
+
+
+type Size
+    = Large
+    | Small
 
 
 type Msg
@@ -23,6 +30,7 @@ type Msg
     | Select2 Charter.Listener
     | Click Charter.Listener
     | Hover Charter.Listener
+    | ChangeSize Size
 
 
 main : Program () Model Msg
@@ -34,6 +42,7 @@ main =
                   , listener2 = Charter.listener
                   , clicked = Nothing
                   , hover = Nothing
+                  , width = Large
                   }
                 , Cmd.none
                 )
@@ -65,6 +74,13 @@ filter data listener =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        ChangeSize width ->
+            ( { model
+                | width = width
+              }
+            , Cmd.none
+            )
+
         Click sel ->
             ( { model | listener = sel, clicked = Charter.clicked sel }
             , Cmd.none
@@ -88,6 +104,14 @@ update msg model =
 
 view : Model -> Html.Html Msg
 view model =
+    let
+        width =
+            if model.width == Large then
+                600
+
+            else
+                300
+    in
     Html.div []
         [ Html.div []
             [ Html.p []
@@ -97,17 +121,22 @@ view model =
 
                   else
                     Html.text " (mouse is up)"
+                , if model.width == Small then
+                    Html.button [ HE.onClick (ChangeSize Large) ] [ Html.text "Larger graph" ]
+
+                  else
+                    Html.button [ HE.onClick (ChangeSize Small) ] [ Html.text "Smaller graph" ]
                 ]
-            , chart (Size 620 120)
+            , chart (Size (width + 20) 120)
                 [ Layer
-                    (Box 600 70 10 10)
+                    (Box width 70 10 10)
                     [ Charter.highlight
                         [ Svg.fill "rgba(255,255,0,0.4)", Svg.stroke "rgba(0,0,0,0.2)", Svg.strokeWidth "0 2 0 2" ]
                         Charter.OnlyX
                         model.listener
                     ]
                 , Layer
-                    (Box 600 50 10 10)
+                    (Box width 50 10 10)
                     [ Charter.onClick model.listener Click
                     , Charter.onSelect model.listener Select
                     , Charter.onHover model.listener Hover
@@ -120,11 +149,11 @@ view model =
                     , Charter.zeroLine []
                     ]
                 , Layer
-                    (Box 600 20 10 60)
+                    (Box width 20 10 60)
                     [ Charter.bar [] 2 data2
                     , Charter.zeroLine []
                     ]
-                , timeAxis (Box 600 10 10 80) 10 data0
+                , timeAxis (Box width 10 10 80) 10 data0
                 ]
             , if Charter.selection model.listener /= Nothing then
                 Html.div [ HA.style "position" "absolute", HA.style "left" "600px" ]

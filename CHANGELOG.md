@@ -1,3 +1,11 @@
+# 1.2.2
+
+Fix the highlight position when a graph is resized
+
+# 1.2.1
+
+Improve performance of lazy by breaking the Box into primitives.
+
 # 1.2.0
 
 Charter.active returns true when the mouse is down over a listening Layer.
