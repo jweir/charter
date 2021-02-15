@@ -73,13 +73,13 @@ import Array
 import Browser.Events as Browser
 import Charter.Extras
 import Json.Decode as Json
-import Svg as Svg
+import Svg
     exposing
         ( Svg
         , circle
         , rect
         )
-import Svg.Attributes as A
+import Svg.Attributes as SA
     exposing
         ( cx
         , cy
@@ -93,7 +93,7 @@ import Svg.Attributes as A
         , x
         , y
         )
-import Svg.Events as E
+import Svg.Events as SE
 import Svg.Lazy as Svg
 
 
@@ -276,7 +276,7 @@ convert width height x y sets =
                                         case listener_.mouse of
                                             MouseInactive ->
                                                 Just <|
-                                                    E.on "mousedown"
+                                                    SE.on "mousedown"
                                                         (decodeSelection
                                                             (Listener listener_ |> rescaleListener scalar)
                                                             box
@@ -292,7 +292,7 @@ convert width height x y sets =
 
                                     EventClick listener_ msg ->
                                         Just <|
-                                            E.on "click"
+                                            SE.on "click"
                                                 (decodeClick
                                                     (listener_ |> rescaleListener scalar)
                                                     box
@@ -302,7 +302,7 @@ convert width height x y sets =
 
                                     EventHover listener_ msg ->
                                         Just <|
-                                            E.on "mousemove"
+                                            SE.on "mousemove"
                                                 (decodeMove
                                                     (listener_ |> rescaleListener scalar)
                                                     box
@@ -436,9 +436,9 @@ onClick l msg =
 frame : Size -> List (Svg a) -> Svg a
 frame size children =
     Svg.svg
-        [ setAttr A.width size.width
-        , setAttr A.height size.height
-        , joinAttr A.viewBox [ 0, 0, size.width, size.height ]
+        [ setAttr SA.width size.width
+        , setAttr SA.height size.height
+        , joinAttr SA.viewBox [ 0, 0, size.width, size.height ]
         ]
         children
 
@@ -451,7 +451,7 @@ layer box children =
 lazyLayer : Float -> Float -> List (Svg a) -> Svg a
 lazyLayer x y children =
     Svg.g
-        [ A.transform ("translate(" ++ String.fromFloat x ++ "," ++ String.fromFloat y ++ ")")
+        [ SA.transform ("translate(" ++ String.fromFloat x ++ "," ++ String.fromFloat y ++ ")")
         ]
         children
 
@@ -557,8 +557,8 @@ barCmd w data attr scalar =
                             ( my y, my 0 - my y )
                 in
                 rect
-                    ([ setAttr A.x (mx x - p)
-                     , setAttr A.y y_
+                    ([ setAttr SA.x (mx x - p)
+                     , setAttr SA.y y_
                      , setAttr width w
                      , setAttr height h
                      ]
@@ -586,8 +586,8 @@ labelCmd labels data styled scalar =
 
                     Just ( _, attr, label_ ) ->
                         [ Svg.text_
-                            ([ setAttr A.x x
-                             , setAttr A.y y
+                            ([ setAttr SA.x x
+                             , setAttr SA.y y
                              ]
                                 ++ styled
                                 ++ attr
@@ -988,8 +988,8 @@ eventArea scalar events =
             scalar.range
     in
     rect
-        ([ setAttr A.x (mx x1)
-         , setAttr A.y (my y2)
+        ([ setAttr SA.x (mx x1)
+         , setAttr SA.y (my y2)
          , setAttr width (mx x2)
          , setAttr height (my y1)
          , fill "rgba(0,0,0,0.0)"
@@ -1053,8 +1053,8 @@ highlightCmd style constraint listener_ _ _ scalar =
                                         0
                     in
                     [ rect
-                        ([ setAttr A.x box.x
-                         , setAttr A.y box.y
+                        ([ setAttr SA.x box.x
+                         , setAttr SA.y box.y
                          , setAttr width box.width
                          , setAttr height box.height
                          , fill "rgba(255,0,0,0.5)"
