@@ -3,8 +3,6 @@ module Charter exposing
     , Point, DataSet, LabelSet
     , line, area, dot, bar, label
     , domain, zeroLine, highlight, Constraint(..)
-    , Listener, listener, subscribe, onSelect, onClick, onHover
-    , selection, clicked, hover, active
     )
 
 {-| This library is for generating inline graphs, called sparklines.
@@ -29,48 +27,10 @@ module Charter exposing
 
 @docs domain, zeroLine, highlight, Constraint
 
-
-# Events
-
-    type alias Model =
-        { listener : Charter.Listener
-        }
-
-    type Msg
-        = Select Charter.Listener
-        | Click Charter.Listener
-        | Hover Charter.Listener
-
-    chart (Size 620 120)
-        [ Layer
-            (Box 600 70 10 10)
-            [ highlight [ Svg.fill "rgba(255,255,0,0.4)" ]
-                OnlyX
-                model.listener
-            ]
-        , Layer
-            (Box 600 50 10 10)
-            [ Charter.onClick model.listener Click
-            , Charter.onSelect model.listener Select
-            , Charter.onHover model.listener Hover
-            , Charter.line [ Svg.stroke "red" ] data0
-            ]
-        ]
-
-@docs Listener, listener, subscribe, onSelect, onClick, onHover
-
-
-# Event Data
-
-Use the below functions to extract the data from events. The Point values
-returned are scaled to the input data, not the mouse events.
-
-@docs selection, clicked, hover, active
-
 -}
 
 import Array
-import Browser.Events as Browser
+import Charter.Events as CE
 import Charter.Extras
 import Json.Decode as Json
 import Svg
@@ -272,39 +232,39 @@ convert width height x y sets =
                         case set of
                             Event eventSet ->
                                 case eventSet of
-                                    EventSelect (Listener listener_) msg ->
-                                        case listener_.mouse of
-                                            MouseInactive ->
+                                    CE.Select (CE.Listener listener) msg ->
+                                        case listener.mouse of
+                                            CE.MouseInactive ->
                                                 Just <|
                                                     SE.on "mousedown"
                                                         (decodeSelection
-                                                            (Listener listener_ |> rescaleListener scalar)
+                                                            (CE.Listener listener |> rescaleListener scalar)
                                                             box
                                                             scalar
                                                             msg
                                                         )
 
-                                            MouseDown ->
+                                            CE.MouseDown ->
                                                 Nothing
 
-                                            MouseDragging ->
+                                            CE.MouseDragging ->
                                                 Nothing
 
-                                    EventClick listener_ msg ->
+                                    CE.Click listener msg ->
                                         Just <|
                                             SE.on "click"
                                                 (decodeClick
-                                                    (listener_ |> rescaleListener scalar)
+                                                    (listener |> rescaleListener scalar)
                                                     box
                                                     scalar
                                                     msg
                                                 )
 
-                                    EventHover listener_ msg ->
+                                    CE.Hover listener msg ->
                                         Just <|
                                             SE.on "mousemove"
                                                 (decodeMove
-                                                    (listener_ |> rescaleListener scalar)
+                                                    (listener |> rescaleListener scalar)
                                                     box
                                                     scalar
                                                     msg
@@ -322,15 +282,15 @@ convert width height x y sets =
 
 
 {-| -}
-type Element a
-    = Command (CommandSet a)
-    | Event (EventSet a)
+type Element msg
+    = Command (CommandSet msg)
+    | Event (CE.Set msg)
 
 
-type alias CommandSet a =
-    { method : Method a
+type alias CommandSet msg =
+    { method : Method msg
     , data : DataSet
-    , attributes : List (Svg.Attribute a)
+    , attributes : List (Svg.Attribute msg)
     }
 
 
@@ -392,7 +352,7 @@ domain data =
 
 {-| Highlight is used to draw a region that has been selected. See `onSelect`
 -}
-highlight : List (Svg.Attribute a) -> Constraint -> Listener -> Element a
+highlight : List (Svg.Attribute a) -> Constraint -> CE.Listener -> Element a
 highlight attr con l =
     CommandSet (highlightCmd attr con l) [] attr |> Command
 
@@ -402,31 +362,6 @@ highlight attr con l =
 zeroLine : List (Svg.Attribute a) -> Element a
 zeroLine attr =
     CommandSet zeroLineCmd [] attr |> Command
-
-
-
--- EVENTS
-
-
-{-| onSelect event for when a selection is made.
--}
-onSelect : Listener -> (Listener -> a) -> Element a
-onSelect l msg =
-    EventSelect l msg |> Event
-
-
-{-| onHover tracks the mouse moving over the chart.
--}
-onHover : Listener -> (Listener -> a) -> Element a
-onHover l msg =
-    EventHover l msg |> Event
-
-
-{-| onClick tracks click events.
--}
-onClick : Listener -> (Listener -> a) -> Element a
-onClick l msg =
-    EventClick l msg |> Event
 
 
 
@@ -709,215 +644,15 @@ joinAttr fun n =
         |> fun
 
 
-
--- EVENTS
-
-
-type EventSet a
-    = EventSelect Listener (Listener -> a)
-    | EventClick Listener (Listener -> a)
-    | EventHover Listener (Listener -> a)
-
-
-{-| A listener to maintain the state of events (selection, hover and clicks). A
-listener can be shared across charts with the same scale.
--}
-type Listener
-    = Listener EventRecord
-
-
-type alias EventRecord =
-    { mouse : Mouse
-    , box : Box
-    , scalar : Maybe Scalar
-
-    -- the starting point on the page
-    , offset : Maybe Point
-    , start : Maybe Point
-
-    -- the bounding box in absolute size to the SVG graph
-    , current : Maybe Point
-
-    -- last clicked position
-    , clicked : Maybe Point
-    , hover : Maybe Point
-    }
-
-
-{-| Create a new event listener.
--}
-listener : Listener
-listener =
-    Listener
-        { mouse = MouseInactive
-        , box = Box 0 0 0 0
-        , scalar = Nothing
-
-        -- the starting point on the page
-        , offset = Nothing
-        , start = Nothing
-
-        -- the bounding box in absolute size to the SVG graph
-        , current = Nothing
-
-        -- last clicked position
-        , clicked = Nothing
-        , hover = Nothing
-        }
-
-
-type Mouse
-    = MouseDown
-    | MouseDragging
-    | MouseInactive
-
-
-{-| When tracking `onSelect` a subscription will be required. The mouse events are tracked outside of the chart's SVG element.
-
-        type alias Model =
-            { listener : Listener }
-
-        type Msg
-            = Select Listener
-
-        subscriptions =
-            Sub.batch [ subscribe model.listener Select ]
-
--}
-subscribe : Listener -> (Listener -> a) -> Sub a
-subscribe (Listener listener_) eventMsg =
-    Sub.batch
-        (case listener_.mouse of
-            MouseInactive ->
-                []
-
-            MouseDown ->
-                [ Browser.onMouseMove (offsetPosition { listener_ | mouse = MouseDragging } eventMsg)
-                , Browser.onMouseUp (Json.succeed ({ listener_ | clicked = Nothing, mouse = MouseInactive } |> Listener |> eventMsg))
-                ]
-
-            MouseDragging ->
-                [ Browser.onMouseMove (offsetPosition listener_ eventMsg)
-                , Browser.onMouseUp (offsetPosition { listener_ | clicked = Nothing, mouse = MouseInactive } eventMsg)
-                ]
-        )
-
-
-{-| Clicked returns a point from a click event.
--}
-clicked : Listener -> Maybe Point
-clicked (Listener listener_) =
-    case ( listener_.scalar, listener_.clicked ) of
-        ( Just scalar, Just ( x, y ) ) ->
-            let
-                ( ix, iy ) =
-                    scalar.inverter
-            in
-            Just
-                ( ix x, iy (y - listener_.box.height |> abs) )
-
-        _ ->
-            Nothing
-
-
-{-| Hover returns a point from a hover event.
--}
-hover : Listener -> Maybe Point
-hover (Listener listener_) =
-    case ( listener_.scalar, listener_.hover ) of
-        ( Just scalar, Just ( x, y ) ) ->
-            let
-                ( ix, iy ) =
-                    scalar.inverter
-            in
-            Just
-                ( ix x, iy (y - listener_.box.height |> abs) )
-
-        _ ->
-            Nothing
-
-
-{-| Hover returns a point from a hover event.
--}
-active : Listener -> Bool
-active (Listener listener_) =
-    case listener_.mouse of
-        MouseInactive ->
-            False
-
-        MouseDown ->
-            True
-
-        MouseDragging ->
-            True
-
-
-{-| Selection returns a box with the selected boundaries of the data.
-
-Use this selection to filter the applications data into a subset.
-
-    filter : DataSet -> Listener -> DataSet
-    filter data listener =
-        case selection listener of
-            Nothing ->
-                []
-
-            Just ( ( x0, _ ), ( x1, _ ) ) ->
-                data
-                    |> List.filter (\( x, _ ) -> x >= x0 && x <= x1)
-
--}
-selection : Listener -> Maybe ( Point, Point )
-selection (Listener listener_) =
-    case ( listener_.scalar, listener_.start, listener_.current ) of
-        ( Just scalar, Just ( dx0, dy0 ), Just ( dx1, dy1 ) ) ->
-            let
-                ( ix, iy ) =
-                    scalar.inverter
-
-                ( bx0, by0 ) =
-                    ( ix dx0, iy (dy0 - listener_.box.height |> abs) )
-
-                ( bx1, by1 ) =
-                    ( ix dx1, iy (dy1 - listener_.box.height |> abs) )
-            in
-            Just
-                ( ( min bx0 bx1, min by0 by1 )
-                , ( max bx0 bx1, max by0 by1 )
-                )
-
-        _ ->
-            Nothing
-
-
-offsetPosition : EventRecord -> (Listener -> a) -> Json.Decoder a
-offsetPosition listener_ msg =
-    case listener_.offset of
-        Nothing ->
-            Json.succeed (msg (Listener listener_))
-
-        Just ( x0, y0 ) ->
-            Json.map2
-                (\x y ->
-                    let
-                        sel_ =
-                            { listener_ | current = Just ( (x |> toFloat) - x0, (y |> toFloat) - y0 ) }
-                    in
-                    Listener sel_ |> msg
-                )
-                (Json.field "pageX" Json.int)
-                (Json.field "pageY" Json.int)
-
-
-decodeSelection : Listener -> Box -> Scalar -> (Listener -> msg) -> Json.Decoder msg
-decodeSelection (Listener listener_) box scalar msg =
+decodeSelection : CE.Listener -> Box -> Scalar -> (CE.Listener -> msg) -> Json.Decoder msg
+decodeSelection (CE.Listener listener) box scalar msg =
     Json.map4
         (\oX oY x y ->
             let
                 sel_ =
-                    { listener_
+                    { listener
                         | scalar = Just scalar
-                        , mouse = MouseDown
+                        , mouse = CE.MouseDown
                         , box = box
                         , offset =
                             Just
@@ -928,7 +663,7 @@ decodeSelection (Listener listener_) box scalar msg =
                         , current = Nothing
                     }
             in
-            msg (Listener sel_)
+            msg (CE.Listener sel_)
         )
         (Json.field "pageX" Json.int)
         (Json.field "pageY" Json.int)
@@ -936,43 +671,43 @@ decodeSelection (Listener listener_) box scalar msg =
         (Json.field "offsetY" Json.int)
 
 
-decodeClick : Listener -> Box -> Scalar -> (Listener -> msg) -> Json.Decoder msg
-decodeClick (Listener listener_) box scalar msg =
+decodeClick : CE.Listener -> Box -> Scalar -> (CE.Listener -> msg) -> Json.Decoder msg
+decodeClick (CE.Listener listener) box scalar msg =
     Json.map2
         (\x y ->
             let
                 sel_ =
-                    { listener_
+                    { listener
                         | scalar = Just scalar
-                        , mouse = MouseInactive
+                        , mouse = CE.MouseInactive
                         , box = box
                         , clicked =
-                            if listener_.current == Nothing then
+                            if listener.current == Nothing then
                                 Just ( (x |> toFloat) - box.x, (y |> toFloat) - box.y )
 
                             else
                                 Nothing
                     }
             in
-            msg (Listener sel_)
+            msg (CE.Listener sel_)
         )
         (Json.field "offsetX" Json.int)
         (Json.field "offsetY" Json.int)
 
 
-decodeMove : Listener -> Box -> Scalar -> (Listener -> msg) -> Json.Decoder msg
-decodeMove (Listener listener_) box scalar msg =
+decodeMove : CE.Listener -> Box -> Scalar -> (CE.Listener -> msg) -> Json.Decoder msg
+decodeMove (CE.Listener listener) box scalar msg =
     Json.map2
         (\x y ->
             let
                 sel_ =
-                    { listener_
+                    { listener
                         | scalar = Just scalar
                         , box = box
                         , hover = Just ( (x |> toFloat) - box.x, (y |> toFloat) - box.y )
                     }
             in
-            msg (Listener sel_)
+            msg (CE.Listener sel_)
         )
         (Json.field "offsetX" Json.int)
         (Json.field "offsetY" Json.int)
@@ -1003,9 +738,9 @@ eventArea scalar events =
 -- the graph size changed since the highlight was created, we need to fix it
 
 
-rescaleListener : Scalar -> Listener -> Listener
-rescaleListener scalar (Listener l) =
-    Listener <|
+rescaleListener : Scalar -> CE.Listener -> CE.Listener
+rescaleListener scalar (CE.Listener l) =
+    CE.Listener <|
         case l.scalar of
             Nothing ->
                 l
@@ -1029,10 +764,10 @@ rescaleListener scalar (Listener l) =
                 { l | current = map l.current, start = map l.start }
 
 
-highlightCmd : List (Svg.Attribute a) -> Constraint -> Listener -> Method a
-highlightCmd style constraint listener_ _ _ scalar =
-    case rescaleListener scalar listener_ of
-        Listener l ->
+highlightCmd : List (Svg.Attribute a) -> Constraint -> CE.Listener -> Method a
+highlightCmd style constraint listener _ _ scalar =
+    case rescaleListener scalar listener of
+        CE.Listener l ->
             case ( l.start, l.current ) of
                 ( Just ( ax1, ay1 ), Just ( bx1, by1 ) ) ->
                     let
