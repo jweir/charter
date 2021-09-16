@@ -1,7 +1,8 @@
 module Example exposing (main)
 
 import Browser
-import Charter exposing (Box, Layer(..), Point, Size, chart, sparkline)
+import Charter exposing (Box, Layer(..), Point, Size, bar, chart, labels, sparkline)
+import Charter.Events as Charter
 import Charter.Extras as Charter
 import Html as Html
 import Html.Attributes as HA
@@ -60,7 +61,7 @@ subscriptions model =
         ]
 
 
-filter : Charter.DataSet -> Charter.Listener -> Charter.DataSet
+filter : List Charter.Point -> Charter.Listener -> List Charter.Point
 filter data listener =
     case Charter.selection listener of
         Nothing ->
@@ -115,6 +116,50 @@ view model =
     Html.div []
         [ Html.div []
             [ Html.p []
+                [ Charter.chart (Charter.Size 100 100)
+                    [ Charter.Layer (Charter.Box 90 90 5 5)
+                        [ Charter.area [] [ ( 0, 10 ), ( 10, 20 ), ( 20, 0 ) ]
+                        , Charter.area [ Svg.stroke "red" ] [ ( 5, 5 ), ( 10, 5 ) ]
+                        ]
+                    ]
+                ]
+            , Html.p []
+                [ chart (Size 400 200)
+                    [ Layer (Box 400 50 0 0)
+                        [ Charter.zeroLine []
+                        , bar [] 5 [ ( 0, 10 ), ( 1, -5 ), ( 2, 4 ), ( 3, 8 ), ( 4, 6 ), ( 5, 11 ) ]
+                        ]
+                    , Layer (Box 400 50 0 50)
+                        [ Charter.zeroLine []
+                        , bar [ Svg.fill "red" ] 5 [ ( 0, 10 ), ( 1, 5 ), ( 2, 4 ), ( 3, 8 ), ( 4, 6 ), ( 5, 11 ) ]
+                        ]
+                    ]
+                ]
+            , Html.p []
+                [ chart (Size 400 200)
+                    [ Layer (Box 400 50 0 0)
+                        [ Charter.zeroLine []
+                        , bar [] 5 [ ( 0, 10 ), ( 1, 5 ), ( 2, 4 ), ( 3, 8 ), ( 4, 6 ), ( 5, 11 ) ]
+                        , Charter.insertDomain [ ( 0, 0 ), ( 1, 1 ) ]
+                        ]
+                    , Layer (Box 400 50 0 50)
+                        [ Charter.zeroLine []
+                        , bar [ Svg.fill "red" ] 5 [ ( 0, 10 ), ( 1, 5 ), ( 2, 4 ), ( 3, 8 ), ( 4, 6 ), ( 5, 11 ) ]
+                        , Charter.insertDomain [ ( 0, 0 ), ( 1, 1 ) ]
+                        ]
+                    , Layer (Box 400 50 0 100)
+                        [ Charter.zeroLine []
+                        , bar [] 5 [ ( 0, 10 ), ( 1, 5 ), ( 2, 4 ), ( 3, 8 ), ( 4, 6 ), ( 5, 11 ) ]
+                        , Charter.insertDomain [ ( 0, 0 ), ( 1, 1 ) ]
+                        ]
+                    , Layer (Box 400 50 0 150)
+                        [ Charter.zeroLine []
+                        , bar [] 5 [ ( 0, 10 ), ( 1, 5 ), ( 2, 4 ), ( 3, 8 ), ( 4, 6 ), ( 5, 11 ) ]
+                        , Charter.insertDomain [ ( 0, 0 ), ( 1, 1 ) ]
+                        ]
+                    ]
+                ]
+            , Html.p []
                 [ Html.text "Mouse over, click and click and drag the below chart for example interactions"
                 , if Charter.active model.listener == True then
                     Html.text " (mouse is down)"
@@ -145,7 +190,7 @@ view model =
                     , Charter.line [] (data1 |> Charter.step Charter.Before)
                     , Charter.dot [ Svg.r "5" ] (List.filterMap identity [ model.clicked ])
                     , Charter.dot [ Svg.fill "red", Svg.r "2" ] (List.filterMap identity [ nearestPoint data0 model.hover ])
-                    , Charter.label [] (hoverLabel model.hover)
+                    , Charter.labels [] (hoverLabel model.hover)
                     , Charter.zeroLine []
                     ]
                 , Layer
@@ -207,11 +252,11 @@ view model =
         ]
 
 
-hoverLabel : Maybe Point -> List ( Point, List (Svg.Attribute a), String )
+hoverLabel : Maybe Point -> List ( List (Svg.Attribute msg), Point, String )
 hoverLabel point =
     [ nearestPoint data0 point ]
         |> List.filterMap identity
-        |> List.map (\( x, y ) -> ( ( x, y ), [], toFloat (round (y * 10)) / 10 |> String.fromFloat ))
+        |> List.map (\( x, y ) -> ( [], ( x, y ), toFloat (round (y * 10)) / 10 |> String.fromFloat ))
 
 
 nearestPoint : List Point -> Maybe Point -> Maybe Point
@@ -232,7 +277,7 @@ nearestPoint points point =
             )
 
 
-timeAxis : Charter.Box -> Int -> Charter.DataSet -> Charter.Layer Msg
+timeAxis : Charter.Box -> Int -> List Charter.Point -> Charter.Layer Msg
 timeAxis box ticks data =
     let
         ( x0, x1 ) =
@@ -256,11 +301,11 @@ timeAxis box ticks data =
                    )
     in
     Layer box
-        [ Charter.domain [ ( x0, 0 ), ( x1, box.height ) ]
+        [ Charter.insertDomain [ ( x0, 0 ), ( x1, box.height ) ]
         , Charter.bar [] 1 times
-        , Charter.label
+        , Charter.labels
             [ Svg.fontSize "10px", Svg.textAnchor "middle", Svg.transform "translate(0, 10)" ]
-            (List.map (\( x, y ) -> ( ( x, y - 10 ), [], x |> fmtTime )) times)
+            (List.map (\( x, y ) -> ( [], ( x, y - 10 ), x |> fmtTime )) times)
         ]
 
 

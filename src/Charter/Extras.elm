@@ -13,13 +13,13 @@ import Tuple
 
 
 y : ( Float, Float ) -> Float
-y ( _, y_ ) =
-    y_
+y t =
+    Tuple.second t
 
 
 x : ( Float, Float ) -> Float
-x ( x_, _ ) =
-    x_
+x t =
+    Tuple.first t
 
 
 {-| Descibes which axes on the graph or from the data to use.
