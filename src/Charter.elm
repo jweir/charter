@@ -73,7 +73,7 @@ import Array
 import Browser.Events as Browser
 import Charter.Extras
 import Json.Decode as Json
-import Svg as Svg
+import Svg
     exposing
         ( Svg
         , circle
@@ -1018,13 +1018,11 @@ rescaleListener scalar (Listener l) =
                     yScale =
                         scalar.box.height / s.box.height
 
-                    map maybePoint =
-                        case maybePoint of
-                            Nothing ->
-                                Nothing
-
-                            Just ( x, y ) ->
-                                Just ( x * xScale, y * yScale )
+                    map =
+                        Maybe.map
+                            (\( x, y ) ->
+                                ( x * xScale, y * yScale )
+                            )
                 in
                 { l | current = map l.current, start = map l.start }
 
