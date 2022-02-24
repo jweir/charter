@@ -2,7 +2,7 @@ module Charter exposing
     ( sparkline, Size, Element, chart, Layer(..), Box
     , Point, DataSet, LabelSet
     , line, area, dot, bar, label
-    , domain, zeroLine, highlight, Constraint(..)
+    , domain, zeroLine, highlight, Constraint(..), extents
     , Listener, listener, subscribe, onSelect, onClick, onHover
     , selection, clicked, hover, active
     )
@@ -27,7 +27,7 @@ module Charter exposing
 
 # Options
 
-@docs domain, zeroLine, highlight, Constraint
+@docs domain, zeroLine, highlight, Constraint, extents
 
 
 # Events
@@ -380,6 +380,35 @@ label attr labelSet =
 
 
 -- OPTIONS
+
+
+{-| extents will return a Maybe of two tuples from the passed Elements.
+
+The first tuple is the low range of (x,y)
+The second tuple is the high range of (x,y)
+
+-}
+extents : List (Element a) -> Maybe ( ( Float, Float ), ( Float, Float ) )
+extents elements =
+    elements
+        |> List.filterMap
+            (\e ->
+                case e of
+                    Command set ->
+                        Just set.data
+
+                    Event _ ->
+                        Nothing
+            )
+        |> List.concatMap identity
+        |> (\v ->
+                case ( List.minimum v, List.maximum v ) of
+                    ( Just lo, Just hi ) ->
+                        Just ( lo, hi )
+
+                    _ ->
+                        Nothing
+           )
 
 
 {-| Domain includes the given data into the graph's domain.

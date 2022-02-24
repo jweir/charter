@@ -1,3 +1,7 @@
+# 1.3.0
+
+Added extents function to extract the domain from a list of Elements.
+
 # 1.2.2
 
 Fix the highlight position when a graph is resized
