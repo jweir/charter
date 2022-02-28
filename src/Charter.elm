@@ -401,10 +401,22 @@ extents elements =
                         Nothing
             )
         |> List.concatMap identity
-        |> (\v ->
-                case ( List.minimum v, List.maximum v ) of
-                    ( Just lo, Just hi ) ->
-                        Just ( lo, hi )
+        |> (\points ->
+                let
+                    minMax v =
+                        ( List.minimum v, List.maximum v )
+
+                    ( x0, x1 ) =
+                        List.map Tuple.first points
+                            |> minMax
+
+                    ( y0, y1 ) =
+                        List.map Tuple.second points
+                            |> minMax
+                in
+                case ( ( x0, y0 ), ( x1, y1 ) ) of
+                    ( ( Just xlo, Just ylo ), ( Just xhi, Just yhi ) ) ->
+                        Just ( ( xlo, ylo ), ( xhi, yhi ) )
 
                     _ ->
                         Nothing
