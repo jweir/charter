@@ -1,7 +1,7 @@
 module Test exposing (main)
 
 import Browser
-import Charter exposing (Box, Layer(..), Point, Size, chart, sparkline)
+import Charter exposing (Box, layer, Point, Size, chart, sparkline)
 import Charter.Extras as Charter
 import Html as Html
 import Html.Attributes as HA
@@ -57,7 +57,7 @@ view : Model -> Html.Html Msg
 view model =
     Html.div []
         [ chart (Size 620 120)
-            [ Layer
+            [ layer
                 (Box 600 100 10 10)
                 [ Charter.area [ Svg.fill "#EEE", Svg.stroke "none" ] data0
                 , Charter.area [ Svg.fill "#CCC", Svg.stroke "none" ] data1

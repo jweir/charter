@@ -14,7 +14,7 @@ main =
         -- The width and height of the created SVG element
         { width = 330, height = 70 }
         -- The chart then takes a list of `Layer` elements
-        ([ Charter.Layer
+        ([ Charter.layer
             {- Each layer has its own width, height
                and x/y position. Here the layer is moved down
                and over 10 pixels to give a little padding.
@@ -29,7 +29,7 @@ main =
             ]
 
          -- This layer will represent a Y axis.
-         , Charter.Layer
+         , Charter.layer
             {- Note this layer is a bit wider the other layer
                to give room for the labels.
             -}
@@ -78,7 +78,7 @@ foo =
         -- B
         { width = 330, height = 70 }
         -- C
-        ([ Charter.Layer
+        ([ Charter.layer
             -- D
             { width = 300, height = 50, x = 10, y = 10 }
             -- E
@@ -87,7 +87,7 @@ foo =
             ]
 
          -- F
-         , Charter.Layer
+         , Charter.layer
             -- E
             { width = 310, height = 50, x = 10, y = 10 }
             -- G
