@@ -1,8 +1,9 @@
 module Charter exposing
-    ( sparkline, Size, Element, chart, Layer(..), Box
+    ( sparkline, Size, Element, layer, chart, Layer, Box
     , Point, DataSet, LabelSet
     , line, area, dot, bar, label
-    , domain, zeroLine, highlight, Constraint(..), extents
+    , zeroLine, highlight, Constraint(..), extents
+    , Domain(..), getDomain, include
     , Listener, listener, subscribe, onSelect, onClick, onHover
     , selection, clicked, hover, active
     )
@@ -12,7 +13,7 @@ module Charter exposing
 
 # Definition
 
-@docs sparkline, Size, Element, chart, Layer, Box
+@docs sparkline, Size, Element, layer, chart, Layer, Box
 
 
 # Data
@@ -27,7 +28,12 @@ module Charter exposing
 
 # Options
 
-@docs domain, zeroLine, highlight, Constraint, extents
+@docs zeroLine, highlight, Constraint, extents
+
+
+# Domain
+
+@docs Domain, getDomain, include
 
 
 # Events
@@ -147,27 +153,35 @@ type alias Range =
     ( Float -> Float, Float -> Float )
 
 
-type alias Domain =
-    ( Point, Point )
-
-
 type alias Method a =
     DataSet
     -> List (Svg.Attribute a)
-    -> Scalar
+    -> Transformer
     -> List (Svg a)
 
 
-type alias Scalar =
+type alias Transformer =
     { domain : Domain
 
     -- range scales from the orginal data to the coordinates on the sized canvas
-    , range : Range
+    , scale : Range
 
     -- invert does the opposite of range
-    , inverter : Range
+    , invert : Range
     , box : Box
     }
+
+
+{-| Layer type
+-}
+type Layer a
+    = Layer
+        { box : Box
+        , commands : List (CommandSet a)
+        , events : List (EventSet a)
+        , domain : Domain
+        , transformer : Transformer
+        }
 
 
 {-| Layers group the chart elements. They have a size and x, y offsets
@@ -175,8 +189,48 @@ type alias Scalar =
 Layers are drawn in the order of the list. If you want something drawn over another layer, place it after that layer.
 
 -}
-type Layer a
-    = Layer Box (List (Element a))
+layer : Box -> List (Element a) -> Layer a
+layer box elements =
+    let
+        ( commands, events, included ) =
+            elements
+                |> List.foldr
+                    (\set ( coms, evts, inc ) ->
+                        case set of
+                            DataElement s ->
+                                ( coms ++ [ s ], evts, inc )
+
+                            IncludedData rec ->
+                                ( coms, evts, rec :: inc )
+
+                            Event e ->
+                                ( coms, evts ++ [ e ], inc )
+                    )
+                    ( [], [], [] )
+
+        domain_ : Domain
+        domain_ =
+            commands
+                |> List.concatMap .data
+                |> findDomain (List.concatMap identity included)
+
+        transformer : Transformer
+        transformer =
+            { domain = domain_
+            , scale = range box domain_
+            , invert = invert box domain_
+            , box = box
+            }
+    in
+    Layer
+        { box = box
+        , commands = commands
+        , events = events
+        , domain = domain_
+        , transformer = transformer
+        }
+
+
 
 
 {-| Use chart to draw graphics with layers. Layers can be positioned and overlayed, allowing for charts with margins and different regions.
@@ -195,7 +249,7 @@ type Layer a
 chart : Size -> List (Layer a) -> Svg a
 chart size layers =
     layers
-        |> List.map (\(Layer box elements) -> Svg.lazy5 convert box.width box.height box.x box.y elements)
+        |> List.map (Svg.lazy convert)
         |> frame size
 
 
@@ -222,115 +276,80 @@ given. So last graph will be drawn on top.
 -}
 sparkline : Size -> List (Element a) -> Svg a
 sparkline size elements =
-    frame size [ Svg.lazy5 convert size.width size.height 0 0 elements ]
+    frame size [ Svg.lazy convert (layer { width = size.width, height = size.height, x = 0, y = 0 } elements) ]
 
 
-convert : Float -> Float -> Float -> Float -> List (Element a) -> Svg a
-convert width height x y sets =
+convert : Layer a -> Svg a
+convert (Layer rec) =
     let
-        box =
-            Box width height x y
-
-        commands =
-            sets
-                |> List.filterMap
-                    (\set ->
-                        case set of
-                            Command s ->
-                                Just s
-
-                            Event _ ->
-                                Nothing
-                    )
-
-        domain_ : Domain
-        domain_ =
-            commands
-                |> List.concatMap (\token -> [ token.data ])
-                |> domainCmd
-
-        -- calc the range in the method, bar needs the size before calcing the range
-        range_ : Range
-        range_ =
-            range box domain_
-
-        scalar =
-            { domain = domain_
-            , range = range_
-            , inverter = invert box domain_
-            , box = box
-            }
-
-        collector : CommandSet a -> List (Svg a)
-        collector token =
-            token.method token.data token.attributes scalar
+        eval : CommandSet a -> List (Svg a)
+        eval token =
+            token.method token.data token.attributes rec.transformer
 
         events =
-            sets
+            rec.events
                 |> List.filterMap
-                    (\set ->
-                        case set of
-                            Event eventSet ->
-                                case eventSet of
-                                    EventSelect (Listener listener_) msg ->
-                                        case listener_.mouse of
-                                            MouseInactive ->
-                                                Just <|
-                                                    E.on "mousedown"
-                                                        (decodeSelection
-                                                            (Listener listener_ |> rescaleListener scalar)
-                                                            box
-                                                            scalar
-                                                            msg
-                                                        )
+                    (\event ->
+                        case event of
+                            EventSelect (Listener listener_) msg ->
+                                case listener_.mouse of
+                                    MouseInactive ->
+                                        E.on "mousedown"
+                                            (decodeSelection
+                                                (Listener listener_ |> rescaleListener rec.transformer)
+                                                rec.box
+                                                rec.transformer
+                                                msg
+                                            )
+                                            |> Just
 
-                                            MouseDown ->
-                                                Nothing
+                                    MouseDown ->
+                                        Nothing
 
-                                            MouseDragging ->
-                                                Nothing
+                                    MouseDragging ->
+                                        Nothing
 
-                                    EventClick listener_ msg ->
-                                        Just <|
-                                            E.on "click"
-                                                (decodeClick
-                                                    (listener_ |> rescaleListener scalar)
-                                                    box
-                                                    scalar
-                                                    msg
-                                                )
+                            EventClick listener_ msg ->
+                                E.on "click"
+                                    (decodeClick
+                                        (listener_ |> rescaleListener rec.transformer)
+                                        rec.box
+                                        rec.transformer
+                                        msg
+                                    )
+                                    |> Just
 
-                                    EventHover listener_ msg ->
-                                        Just <|
-                                            E.on "mousemove"
-                                                (decodeMove
-                                                    (listener_ |> rescaleListener scalar)
-                                                    box
-                                                    scalar
-                                                    msg
-                                                )
-
-                            Command _ ->
-                                Nothing
+                            EventHover listener_ msg ->
+                                E.on "mousemove"
+                                    (decodeMove
+                                        (listener_ |> rescaleListener rec.transformer)
+                                        rec.box
+                                        rec.transformer
+                                        msg
+                                    )
+                                    |> Just
                     )
     in
-    commands
-        |> List.concatMap collector
-        -- add the events to the end, so it is on top of the other elements
-        |> (\list -> list ++ [ eventArea scalar events ])
-        |> layer box
+    lazyLayer rec.box
+        ((rec.commands
+            |> List.concatMap eval
+         )
+            -- add the events to the end, so it is on top of the other elements
+            ++ [ eventArea rec.transformer events ]
+        )
 
 
 {-| -}
 type Element a
-    = Command (CommandSet a)
+    = DataElement (CommandSet a)
+    | IncludedData (List ( Maybe Float, Maybe Float ))
     | Event (EventSet a)
 
 
 type alias CommandSet a =
-    { method : Method a
-    , data : DataSet
+    { data : DataSet
     , attributes : List (Svg.Attribute a)
+    , method : Method a
     }
 
 
@@ -338,32 +357,37 @@ type alias CommandSet a =
 -- DRAWING
 
 
+commandSet : DataSet -> List (Svg.Attribute a) -> Method a -> CommandSet a
+commandSet data =
+    CommandSet data
+
+
 {-| Line creates a line chart
 -}
 line : List (Svg.Attribute a) -> DataSet -> Element a
 line attr data =
-    CommandSet lineCmd data attr |> Command
+    commandSet data attr lineCmd |> DataElement
 
 
 {-| Area creates a graph meant to be filled
 -}
 area : List (Svg.Attribute a) -> DataSet -> Element a
 area attr data =
-    CommandSet areaCmd data attr |> Command
+    commandSet data attr areaCmd |> DataElement
 
 
 {-| Dot draws a dot at each point. Set the radius of the dot by styling it `[Svg.r "3"]`
 -}
 dot : List (Svg.Attribute a) -> DataSet -> Element a
 dot attr data =
-    CommandSet dotCmd data attr |> Command
+    commandSet data attr dotCmd |> DataElement
 
 
 {-| Bar draws a bar graph of a given width.
 -}
 bar : List (Svg.Attribute a) -> Float -> DataSet -> Element a
 bar attr width data =
-    CommandSet (barCmd width) data attr |> Command
+    commandSet data attr (barCmd width) |> DataElement
 
 
 {-| Label plots text on the graph
@@ -375,7 +399,7 @@ label attr labelSet =
         data =
             List.map (\( p, _, _ ) -> p) labelSet
     in
-    CommandSet (labelCmd labelSet) data attr |> Command
+    commandSet data attr (labelCmd labelSet) |> DataElement
 
 
 
@@ -387,6 +411,8 @@ label attr labelSet =
 The first tuple is the low range of (x,y)
 The second tuple is the high range of (x,y)
 
+**Deprecated**
+
 -}
 extents : List (Element a) -> Maybe ( ( Float, Float ), ( Float, Float ) )
 extents elements =
@@ -394,8 +420,11 @@ extents elements =
         |> List.filterMap
             (\e ->
                 case e of
-                    Command set ->
+                    DataElement set ->
                         Just set.data
+
+                    IncludedData _ ->
+                        Nothing
 
                     Event _ ->
                         Nothing
@@ -423,26 +452,18 @@ extents elements =
            )
 
 
-{-| Domain includes the given data into the graph's domain.
-This is useful when creating multiple graphs that need to have the same scale.
--}
-domain : DataSet -> Element a
-domain data =
-    CommandSet noop data [] |> Command
-
-
 {-| Highlight is used to draw a region that has been selected. See `onSelect`
 -}
 highlight : List (Svg.Attribute a) -> Constraint -> Listener -> Element a
 highlight attr con l =
-    CommandSet (highlightCmd attr con l) [] attr |> Command
+    commandSet [] attr (highlightCmd attr con l) |> DataElement
 
 
 {-| ZeroLine will draw a line at the 0 y axis
 -}
 zeroLine : List (Svg.Attribute a) -> Element a
 zeroLine attr =
-    CommandSet zeroLineCmd [] attr |> Command
+    CommandSet [] attr zeroLineCmd |> DataElement
 
 
 
@@ -484,15 +505,12 @@ frame size children =
         children
 
 
-layer : Box -> List (Svg a) -> Svg a
-layer box children =
-    Svg.lazy3 lazyLayer box.x box.y children
-
-
-lazyLayer : Float -> Float -> List (Svg a) -> Svg a
-lazyLayer x y children =
-    Svg.g
-        [ A.transform ("translate(" ++ String.fromFloat x ++ "," ++ String.fromFloat y ++ ")")
+lazyLayer : Box -> List (Svg a) -> Svg a
+lazyLayer { x, y } children =
+    Svg.lazy2
+        Svg.g
+        [ A.transform
+            ("translate(" ++ String.fromFloat x ++ "," ++ String.fromFloat y ++ ")")
         ]
         children
 
@@ -500,7 +518,7 @@ lazyLayer x y children =
 zeroLineCmd : Method a
 zeroLineCmd _ attr scalar =
     let
-        ( ( x1, _ ), ( x2, _ ) ) =
+        (Domain ( ( x1, _ ), ( x2, _ ) )) =
             scalar.domain
     in
     lineCmd
@@ -520,7 +538,7 @@ lineCmd data attr scalar =
         ([ fill "none"
          , stroke "#000"
          , setAttr strokeWidth 1
-         , d (path scalar.range data)
+         , d (path scalar.scale data)
          ]
             ++ attr
         )
@@ -531,7 +549,7 @@ lineCmd data attr scalar =
 areaCmd : Method a
 areaCmd data attr scalar =
     let
-        ( ( _, miny ), _ ) =
+        (Domain ( ( _, miny ), _ )) =
             scalar.domain
 
         ( minx, maxx ) =
@@ -558,7 +576,7 @@ areaCmd data attr scalar =
 dotCmd : Method a
 dotCmd data attr scalar =
     data
-        |> scale scalar.range
+        |> scale scalar.scale
         |> List.map
             (\( x, y ) ->
                 circle
@@ -575,11 +593,11 @@ dotCmd data attr scalar =
 barCmd : Float -> Method a
 barCmd w data attr scalar =
     let
-        ( ( x0, _ ), ( x1, _ ) ) =
+        (Domain ( ( x0, _ ), ( x1, _ ) )) =
             scalar.domain
 
         ( mx, my ) =
-            scalar.range
+            scalar.scale
     in
     data
         |> List.map
@@ -616,7 +634,7 @@ labelCmd labels data styled scalar =
             labels |> Array.fromList
     in
     data
-        |> scale scalar.range
+        |> scale scalar.scale
         |> Array.fromList
         |> Array.toIndexedList
         |> List.concatMap
@@ -663,46 +681,93 @@ path r data =
 
 
 
--- FIXME BUG when domain min and max are equal
+-- DOMAIN
 
 
-domainCmd : List DataSet -> Domain
-domainCmd dataset =
-    let
-        flatData =
-            dataset |> List.concatMap (\s -> s)
-
-        seed =
-            flatData
-                |> List.head
-                |> Maybe.withDefault ( 0, 0 )
-    in
-    flatData
-        |> List.foldr
-            (\( x, y ) ( ( xlo, ylo ), ( xhi, yhi ) ) ->
-                ( ( Basics.min xlo x, Basics.min ylo y )
-                , ( Basics.max xhi x, Basics.max yhi y )
-                )
-            )
-            ( seed, seed )
-        |> ensure
-
-
-{-| esures the domain along y is not identical
+{-| Domain defines the min (x,u) and max (x,y) points in the data.
 -}
-ensure : Domain -> Domain
-ensure ( ( x0, y0 ), ( x1, y1 ) ) =
-    if y0 == y1 then
-        ( ( x0, min 0 y0 ), ( x1, y1 ) )
+type Domain
+    = Domain ( Point, Point )
 
-    else
-        ( ( x0, y0 ), ( x1, y1 ) )
+
+
+findDomain : List (Maybe Float, Maybe Float) -> DataSet -> Domain
+findDomain included dataset =
+    let
+        includedX =
+            included
+                |> List.filterMap Tuple.first
+
+        incldedY =
+            included
+                |> List.filterMap Tuple.second
+
+        ensure (Domain ( ( x0, y0 ), ( x1, y1 ) )) =
+            if y0 == y1 then
+                ( ( x0, min 0 y0 ), ( x1, y1 ) ) |> Domain
+
+            else
+                ( ( x0, y0 ), ( x1, y1 ) ) |> Domain
+
+        seedLo (x,y) =
+          (x :: includedX |> List.minimum |> Maybe.withDefault x
+          ,y :: incldedY |> List.minimum |> Maybe.withDefault y
+          )
+
+        seedHi (x,y) =
+          (x :: includedX |> List.maximum |> Maybe.withDefault x
+          ,y :: incldedY |> List.maximum |> Maybe.withDefault y
+          )
+    in
+    case dataset of
+        -- TODO returning an EmptyDomain would be better
+        -- and not rendering anything when there is no data
+        [] ->
+            Domain ( ( 0, 0 ), ( 0, 0 ) )
+
+        seed :: rest ->
+            rest
+                |> List.foldr
+                    (\( x, y ) ( ( xlo, ylo ), ( xhi, yhi ) ) ->
+                        ( ( Basics.min xlo x, Basics.min ylo y )
+                        , ( Basics.max xhi x, Basics.max yhi y )
+                        )
+                    )
+                    ( seedLo seed, seedHi seed )
+                |> Domain
+                |> ensure
+
+
+{-| domain will insert points into the Layer's Domain that are not meant to be rendered.
+This is useful when creating multiple Layers that need to have the same scale
+or ensure that a min/max value is in the scale.
+
+For example:
+
+        You are graphing the points [(10,5), (20,6)] but you want the graph to start at (0,0)
+
+        call
+
+        include  [(Just 0, Just 0)]
+
+-}
+
+include : List ( Maybe Float, Maybe Float ) -> Element a
+include rec =
+    IncludedData rec
+
+
+{-| Get the Domain from a Layer
+-}
+getDomain : Layer a -> Domain
+getDomain (Layer rec) =
+    rec.domain
 
 
 {-| creates x and y scale functions
 -}
 range : Box -> Domain -> Range
-range box ( ( x0, y0 ), ( x1, y1 ) ) =
+range box (Domain ( ( x0, y0 ), ( x1, y1 ) )) =
     ( \x ->
         (x - x0) * (box.width / (x1 - x0)) |> noNan
     , \y ->
@@ -713,7 +778,7 @@ range box ( ( x0, y0 ), ( x1, y1 ) ) =
 {-| creates x and y scale inversion functions
 -}
 invert : Box -> Domain -> Range
-invert box ( ( x0, y0 ), ( x1, y1 ) ) =
+invert box (Domain ( ( x0, y0 ), ( x1, y1 ) )) =
     ( \x ->
         (x / box.width) * (x1 - x0) + x0 |> noNan
     , \y ->
@@ -770,7 +835,7 @@ type Listener
 type alias EventRecord =
     { mouse : Mouse
     , box : Box
-    , scalar : Maybe Scalar
+    , scalar : Maybe Transformer
 
     -- the starting point on the page
     , offset : Maybe Point
@@ -852,7 +917,7 @@ clicked (Listener listener_) =
         ( Just scalar, Just ( x, y ) ) ->
             let
                 ( ix, iy ) =
-                    scalar.inverter
+                    scalar.invert
             in
             Just
                 ( ix x, iy (y - listener_.box.height |> abs) )
@@ -869,7 +934,7 @@ hover (Listener listener_) =
         ( Just scalar, Just ( x, y ) ) ->
             let
                 ( ix, iy ) =
-                    scalar.inverter
+                    scalar.invert
             in
             Just
                 ( ix x, iy (y - listener_.box.height |> abs) )
@@ -914,7 +979,7 @@ selection (Listener listener_) =
         ( Just scalar, Just ( dx0, dy0 ), Just ( dx1, dy1 ) ) ->
             let
                 ( ix, iy ) =
-                    scalar.inverter
+                    scalar.invert
 
                 ( bx0, by0 ) =
                     ( ix dx0, iy (dy0 - listener_.box.height |> abs) )
@@ -950,7 +1015,7 @@ offsetPosition listener_ msg =
                 (Json.field "pageY" Json.int)
 
 
-decodeSelection : Listener -> Box -> Scalar -> (Listener -> msg) -> Json.Decoder msg
+decodeSelection : Listener -> Box -> Transformer -> (Listener -> msg) -> Json.Decoder msg
 decodeSelection (Listener listener_) box scalar msg =
     Json.map4
         (\oX oY x y ->
@@ -977,7 +1042,7 @@ decodeSelection (Listener listener_) box scalar msg =
         (Json.field "offsetY" Json.int)
 
 
-decodeClick : Listener -> Box -> Scalar -> (Listener -> msg) -> Json.Decoder msg
+decodeClick : Listener -> Box -> Transformer -> (Listener -> msg) -> Json.Decoder msg
 decodeClick (Listener listener_) box scalar msg =
     Json.map2
         (\x y ->
@@ -1001,7 +1066,7 @@ decodeClick (Listener listener_) box scalar msg =
         (Json.field "offsetY" Json.int)
 
 
-decodeMove : Listener -> Box -> Scalar -> (Listener -> msg) -> Json.Decoder msg
+decodeMove : Listener -> Box -> Transformer -> (Listener -> msg) -> Json.Decoder msg
 decodeMove (Listener listener_) box scalar msg =
     Json.map2
         (\x y ->
@@ -1019,14 +1084,14 @@ decodeMove (Listener listener_) box scalar msg =
         (Json.field "offsetY" Json.int)
 
 
-eventArea : Scalar -> List (Svg.Attribute a) -> Svg a
+eventArea : Transformer -> List (Svg.Attribute a) -> Svg a
 eventArea scalar events =
     let
-        ( ( x1, y1 ), ( x2, y2 ) ) =
+        (Domain ( ( x1, y1 ), ( x2, y2 ) )) =
             scalar.domain
 
         ( mx, my ) =
-            scalar.range
+            scalar.scale
     in
     rect
         ([ setAttr A.x (mx x1)
@@ -1044,7 +1109,7 @@ eventArea scalar events =
 -- the graph size changed since the highlight was created, we need to fix it
 
 
-rescaleListener : Scalar -> Listener -> Listener
+rescaleListener : Transformer -> Listener -> Listener
 rescaleListener scalar (Listener l) =
     Listener <|
         case l.scalar of

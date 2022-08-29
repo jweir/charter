@@ -1,3 +1,16 @@
+# 2.0.0
+
+### New
+
+The Domain type is exposed.
+`getDomain` created to extract the Domain from a Layer.
+
+### Breaking
+
+`extents` is deprecated
+`domain` becomes `include` with a different signature
+`Layer` is now defined via the function `layer`
+
 # 1.3.1
 
 Fixed a bug in the extents function.

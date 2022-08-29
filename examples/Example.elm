@@ -1,7 +1,7 @@
 module Example exposing (main)
 
 import Browser
-import Charter exposing (Box, Layer(..), Point, Size, chart, sparkline)
+import Charter exposing (Box, Point, Size, chart, layer, sparkline)
 import Charter.Extras as Charter
 import Html as Html
 import Html.Attributes as HA
@@ -111,6 +111,21 @@ view model =
 
             else
                 300
+
+        mainLayer =
+            layer
+                (Box width 50 10 10)
+                [ Charter.onClick model.listener Click
+                , Charter.onSelect model.listener Select
+                , Charter.onHover model.listener Hover
+                , Charter.line [ Svg.stroke "red" ] data0
+                , Charter.line [ Svg.stroke "gray" ] (data0 |> Charter.step Charter.Before)
+                , Charter.line [] (data1 |> Charter.step Charter.Before)
+                , Charter.dot [ Svg.r "5" ] (List.filterMap identity [ model.clicked ])
+                , Charter.dot [ Svg.fill "red", Svg.r "2" ] (List.filterMap identity [ nearestPoint data0 model.hover ])
+                , Charter.label [] (hoverLabel model.hover)
+                , Charter.zeroLine []
+                ]
     in
     Html.div []
         [ Html.div []
@@ -128,45 +143,37 @@ view model =
                     Html.button [ HE.onClick (ChangeSize Small) ] [ Html.text "Smaller graph" ]
                 ]
             , chart (Size (width + 20) 120)
-                [ Layer
+                [ layer
                     (Box width 70 10 10)
                     [ Charter.highlight
                         [ Svg.fill "rgba(255,255,0,0.4)", Svg.stroke "rgba(0,0,0,0.2)", Svg.strokeWidth "0 2 0 2" ]
                         Charter.OnlyX
                         model.listener
                     ]
-                , Layer
-                    (Box width 50 10 10)
-                    [ Charter.onClick model.listener Click
-                    , Charter.onSelect model.listener Select
-                    , Charter.onHover model.listener Hover
-                    , Charter.line [ Svg.stroke "red" ] data0
-                    , Charter.line [ Svg.stroke "gray" ] (data0 |> Charter.step Charter.Before)
-                    , Charter.line [] (data1 |> Charter.step Charter.Before)
-                    , Charter.dot [ Svg.r "5" ] (List.filterMap identity [ model.clicked ])
-                    , Charter.dot [ Svg.fill "red", Svg.r "2" ] (List.filterMap identity [ nearestPoint data0 model.hover ])
-                    , Charter.label [] (hoverLabel model.hover)
-                    , Charter.zeroLine []
-                    ]
-                , Layer
+                , mainLayer
+                , layer
                     (Box width 20 10 60)
                     [ Charter.bar [] 2 data2
                     , Charter.zeroLine []
                     ]
-                , timeAxis (Box width 10 10 80) 10 data0
+                , timeAxis (Box width 10 10 80) 10 mainLayer
                 ]
             , if Charter.selection model.listener /= Nothing then
-                Html.div [ HA.style "position" "absolute", HA.style "left" "600px" ]
-                    [ chart (Size 820 440)
-                        [ Layer
+                let
+                    layer2 =
+                        layer
                             (Box 800 380 10 10)
                             [ Charter.line [] (filter data0 model.listener)
                             , Charter.line [] (filter data1 model.listener)
                             , Charter.zeroLine []
                             ]
-                        , Layer (Box 800 20 10 390)
+                in
+                Html.div [ HA.style "position" "absolute", HA.style "left" "600px" ]
+                    [ chart (Size 820 440)
+                        [ layer2
+                        , layer (Box 800 20 10 390)
                             [ Charter.area [ Svg.stroke "none", Svg.fill "rgb(150,150,255)" ] (filter data2 model.listener) ]
-                        , timeAxis (Box 800 10 10 410) 10 (filter data1 model.listener)
+                        , timeAxis (Box 800 10 10 410) 10 layer2
                         ]
                     ]
 
@@ -188,15 +195,18 @@ view model =
 
                         b =
                             filter data1 model.listener2
-                    in
-                    Html.div []
-                        [ chart (Size 620 140)
-                            [ Layer (Box 600 100 10 10)
+
+                        layer2 =
+                            layer (Box 600 100 10 10)
                                 [ Charter.line [] a
                                 , Charter.line [] b
                                 , Charter.zeroLine []
                                 ]
-                            , timeAxis (Charter.Box 600 10 10 110) 20 a
+                    in
+                    Html.div []
+                        [ chart (Size 620 140)
+                            [ layer2
+                            , timeAxis (Charter.Box 600 10 10 110) 20 layer2
                             ]
                         ]
 
@@ -232,11 +242,13 @@ nearestPoint points point =
             )
 
 
-timeAxis : Charter.Box -> Int -> Charter.DataSet -> Charter.Layer Msg
-timeAxis box ticks data =
+timeAxis : Charter.Box -> Int -> Charter.Layer Msg -> Charter.Layer Msg
+timeAxis box ticks dataLayer =
     let
         ( x0, x1 ) =
-            Charter.minMax Charter.X data
+            case Charter.getDomain dataLayer of
+                Charter.Domain ( ( xLo, _ ), ( xHi, _ ) ) ->
+                    ( xLo, xHi )
 
         delta =
             (x1 - x0) / toFloat ticks
@@ -255,8 +267,8 @@ timeAxis box ticks data =
                             ++ (String.fromInt (Time.toMinute Time.utc t) |> String.padLeft 2 '0')
                    )
     in
-    Layer box
-        [ Charter.domain [ ( x0, 0 ), ( x1, box.height ) ]
+    layer box
+        [ Charter.include [ ( Nothing, Just 0 ), ( Nothing, Just box.height ) ]
         , Charter.bar [] 1 times
         , Charter.label
             [ Svg.fontSize "10px", Svg.textAnchor "middle", Svg.transform "translate(0, 10)" ]
