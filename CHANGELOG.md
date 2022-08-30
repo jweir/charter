@@ -1,3 +1,9 @@
+# 2.0.1
+
+### Fixed
+
+Calculation of Layer Domain when there is only `include` data.
+
 # 2.0.0
 
 ### New

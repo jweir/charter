@@ -231,8 +231,6 @@ layer box elements =
         }
 
 
-
-
 {-| Use chart to draw graphics with layers. Layers can be positioned and overlayed, allowing for charts with margins and different regions.
 
     chart (Size 620 120)
@@ -690,15 +688,14 @@ type Domain
     = Domain ( Point, Point )
 
 
-
-findDomain : List (Maybe Float, Maybe Float) -> DataSet -> Domain
+findDomain : List ( Maybe Float, Maybe Float ) -> DataSet -> Domain
 findDomain included dataset =
     let
         includedX =
             included
                 |> List.filterMap Tuple.first
 
-        incldedY =
+        includedY =
             included
                 |> List.filterMap Tuple.second
 
@@ -709,23 +706,33 @@ findDomain included dataset =
             else
                 ( ( x0, y0 ), ( x1, y1 ) ) |> Domain
 
-        seedLo (x,y) =
-          (x :: includedX |> List.minimum |> Maybe.withDefault x
-          ,y :: incldedY |> List.minimum |> Maybe.withDefault y
-          )
+        seedLo ( x, y ) =
+            ( x :: includedX |> List.minimum |> Maybe.withDefault x
+            , y :: includedY |> List.minimum |> Maybe.withDefault y
+            )
 
-        seedHi (x,y) =
-          (x :: includedX |> List.maximum |> Maybe.withDefault x
-          ,y :: incldedY |> List.maximum |> Maybe.withDefault y
-          )
+        seedHi ( x, y ) =
+            ( x :: includedX |> List.maximum |> Maybe.withDefault x
+            , y :: includedY |> List.maximum |> Maybe.withDefault y
+            )
     in
-    case dataset of
+    case ( includedX, includedY, dataset ) of
         -- TODO returning an EmptyDomain would be better
         -- and not rendering anything when there is no data
-        [] ->
-            Domain ( ( 0, 0 ), ( 0, 0 ) )
+        ( [ x0, x1 ], [ y0, y1 ], [] ) ->
+            Domain ( ( x0, y0 ), ( x1, y1 ) )
 
-        seed :: rest ->
+        ( x, y, [] ) ->
+            Domain
+                ( ( List.minimum x |> Maybe.withDefault 0
+                  , List.minimum y |> Maybe.withDefault 0
+                  )
+                , ( List.maximum x |> Maybe.withDefault 0
+                  , List.maximum y |> Maybe.withDefault 0
+                  )
+                )
+
+        ( _, _, seed :: rest ) ->
             rest
                 |> List.foldr
                     (\( x, y ) ( ( xlo, ylo ), ( xhi, yhi ) ) ->
@@ -751,7 +758,6 @@ For example:
         include  [(Just 0, Just 0)]
 
 -}
-
 include : List ( Maybe Float, Maybe Float ) -> Element a
 include rec =
     IncludedData rec
