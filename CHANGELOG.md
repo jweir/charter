@@ -1,3 +1,9 @@
+# 2.0.4
+
+### Fixed
+
+Detecting mouseup during a drag operation
+
 # 2.0.3
 
 ### Feature changed

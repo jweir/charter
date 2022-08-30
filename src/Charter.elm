@@ -1082,20 +1082,24 @@ decodeClick (Listener listener_) box scalar msg =
 
 decodeMove : Listener -> Box -> Transformer -> (Listener -> msg) -> Json.Decoder msg
 decodeMove (Listener listener_) box scalar msg =
-    Json.map2
-        (\x y ->
-            let
-                sel_ =
-                    { listener_
-                        | scalar = Just scalar
-                        , box = box
-                        , hover = Just ( (x |> toFloat) - box.x, (y |> toFloat) - box.y )
-                    }
-            in
-            msg (Listener sel_)
+    Json.map3
+        (\x y button ->
+            (if button == 0 then
+                { listener_ | mouse = MouseInactive }
+
+             else
+                { listener_
+                    | scalar = Just scalar
+                    , box = box
+                    , hover = Just ( (x |> toFloat) - box.x, (y |> toFloat) - box.y )
+                }
+            )
+                |> Listener
+                |> msg
         )
         (Json.field "offsetX" Json.int)
         (Json.field "offsetY" Json.int)
+        (Json.field "buttons" Json.int)
 
 
 eventArea : Transformer -> List (Svg.Attribute a) -> Svg a
