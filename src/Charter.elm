@@ -192,21 +192,24 @@ Layers are drawn in the order of the list. If you want something drawn over anot
 layer : Box -> List (Element a) -> Layer a
 layer box elements =
     let
+        func set ( coms, evts, inc ) =
+            case set of
+                Node a b ->
+                    func a ( coms, evts, inc )
+                        |> func b
+
+                DataElement s ->
+                    ( coms ++ [ s ], evts, inc )
+
+                IncludedData rec ->
+                    ( coms, evts, rec :: inc )
+
+                Event e ->
+                    ( coms, evts ++ [ e ], inc )
+
         ( commands, events, included ) =
             elements
-                |> List.foldl
-                    (\set ( coms, evts, inc ) ->
-                        case set of
-                            DataElement s ->
-                                ( coms ++ [ s ], evts, inc )
-
-                            IncludedData rec ->
-                                ( coms, evts, rec :: inc )
-
-                            Event e ->
-                                ( coms, evts ++ [ e ], inc )
-                    )
-                    ( [], [], [] )
+                |> List.foldl func ( [], [], [] )
 
         domain_ : Domain
         domain_ =
@@ -342,6 +345,7 @@ type Element a
     = DataElement (CommandSet a)
     | IncludedData (List ( Maybe Float, Maybe Float ))
     | Event (EventSet a)
+    | Node (Element a) (Element a)
 
 
 type alias CommandSet a =
@@ -418,6 +422,9 @@ extents elements =
         |> List.filterMap
             (\e ->
                 case e of
+                    Node _ _ ->
+                        Nothing
+
                     DataElement set ->
                         Just set.data
 
@@ -461,7 +468,8 @@ highlight attr con l =
 -}
 zeroLine : List (Svg.Attribute a) -> Element a
 zeroLine attr =
-    CommandSet [] attr zeroLineCmd |> DataElement
+    DataElement (CommandSet [] attr zeroLineCmd)
+        |> Node (IncludedData [ ( Nothing, Just 0 ) ])
 
 
 

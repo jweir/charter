@@ -1,3 +1,9 @@
+# 2.0.3
+
+### Feature changed
+
+`zeroLine` inserts a 0 in to the Y domain.
+
 # 2.0.2
 
 ### Fixed

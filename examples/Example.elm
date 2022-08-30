@@ -118,8 +118,8 @@ view model =
                 [ Charter.onClick model.listener Click
                 , Charter.onSelect model.listener Select
                 , Charter.onHover model.listener Hover
-                , Charter.area [ Svg.stroke "none", Svg.fill "rgba(250,0,0,0.50)" ] (data0 |> Charter.step  Charter.Before)
-                , Charter.line [Svg.stroke "black"] (data1 |> Charter.step Charter.Before)
+                , Charter.area [ Svg.stroke "none", Svg.fill "rgba(250,0,0,0.50)" ] (data0 |> Charter.step Charter.Before)
+                , Charter.line [ Svg.stroke "black" ] (data1 |> Charter.step Charter.Before)
                 , Charter.dot [ Svg.r "5" ] (List.filterMap identity [ model.clicked ])
                 , Charter.dot [ Svg.fill "red", Svg.r "2" ] (List.filterMap identity [ nearestPoint data0 model.hover ])
                 , Charter.label [] (hoverLabel model.hover)
@@ -128,7 +128,16 @@ view model =
     in
     Html.div []
         [ Html.div []
-            [ Html.p []
+            [
+              chart (Size (width + 20) 120)
+                [ layer
+                    (Box width 120 0 0)
+                    [ Charter.line [] [(10,10),(20,20)]
+                    , Charter.zeroLine []
+                    ]
+                ]
+
+              ,Html.p []
                 [ Html.text "Mouse over, click and click and drag the below chart for example interactions"
                 , if Charter.active model.listener == True then
                     Html.text " (mouse is down)"
