@@ -194,7 +194,7 @@ layer box elements =
     let
         ( commands, events, included ) =
             elements
-                |> List.foldr
+                |> List.foldl
                     (\set ( coms, evts, inc ) ->
                         case set of
                             DataElement s ->

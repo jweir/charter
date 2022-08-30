@@ -1,3 +1,9 @@
+# 2.0.2
+
+### Fixed
+
+Drawing order was reversed
+
 # 2.0.1
 
 ### Fixed
