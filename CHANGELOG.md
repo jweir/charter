@@ -1,3 +1,9 @@
+# 2.0.6
+
+### Fixed
+
+Removed a Debuger
+
 # 2.0.5
 
 ### Fixed

@@ -1082,9 +1082,6 @@ decodeClick (Listener listener_) box scalar msg =
 
 decodeMove : Listener -> Box -> Transformer -> (Listener -> msg) -> Json.Decoder msg
 decodeMove (Listener listener_) box scalar msg =
-  let
-      _ = Debug.log "l" listener_.mouse
-  in
     Json.map3
         (\x y button ->
             (if button == 0 && listener_.mouse == MouseDragging then
