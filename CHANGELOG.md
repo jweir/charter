@@ -1,3 +1,9 @@
+# 2.0.5
+
+### Fixed
+
+Previous fix broke hovering
+
 # 2.0.4
 
 ### Fixed
