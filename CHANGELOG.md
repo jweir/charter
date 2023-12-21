@@ -1,3 +1,7 @@
+# 2.0.7
+
+onAnimationFrameDelta now used to process events for a smoother experience
+
 # 2.0.6
 
 ### Fixed
