@@ -2,6 +2,9 @@
 
 onAnimationFrameDelta now used to process events for a smoother experience
 
+This was done as a simple debounce.  Production testing with high point count has shown it needs to be better.
+
+
 # 2.0.6
 
 ### Fixed
