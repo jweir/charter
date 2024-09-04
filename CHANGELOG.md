@@ -1,3 +1,7 @@
+# 2.1.1
+
+Removed the onAnimationFrameDelta.  It forced too many updates and was unperformant with high point count charts.
+
 # 2.1.0
 stacked area charts supported
 

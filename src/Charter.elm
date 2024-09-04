@@ -957,7 +957,6 @@ type alias EventRecord =
     -- last clicked position
     , clicked : Maybe Point
     , hover : Maybe Point
-    , hoverQueue : Maybe Point
     }
 
 
@@ -980,9 +979,6 @@ listener =
         -- last clicked position
         , clicked = Nothing
         , hover = Nothing
-
-        -- holds the state until the animation frame can process it
-        , hoverQueue = Nothing
         }
 
 
@@ -1007,39 +1003,36 @@ type Mouse
 subscribe : Listener -> (Listener -> a) -> Sub a
 subscribe (Listener listener_) eventMsg =
     Sub.batch
-        (Browser.onAnimationFrameDelta
-            (\_ -> eventMsg (Listener { listener_ | hoverQueue = Nothing, hover = listener_.hoverQueue }))
-            :: (case listener_.mouse of
-                    MouseInactive ->
-                        []
+        (case listener_.mouse of
+            MouseInactive ->
+                []
 
-                    MouseDown ->
-                        [ Browser.onMouseMove (offsetPosition { listener_ | mouse = MouseDragging } eventMsg)
-                        , Browser.onMouseUp
-                            (Json.succeed
-                                ({ listener_
-                                    | clicked =
-                                        Nothing
-                                    , mouse = MouseInactive
-                                 }
-                                    |> Listener
-                                    |> eventMsg
-                                )
-                            )
-                        ]
+            MouseDown ->
+                [ Browser.onMouseMove (offsetPosition { listener_ | mouse = MouseDragging } eventMsg)
+                , Browser.onMouseUp
+                    (Json.succeed
+                        ({ listener_
+                            | clicked =
+                                Nothing
+                            , mouse = MouseInactive
+                         }
+                            |> Listener
+                            |> eventMsg
+                        )
+                    )
+                ]
 
-                    MouseDragging ->
-                        [ Browser.onMouseMove (offsetPosition listener_ eventMsg)
-                        , Browser.onMouseUp
-                            (offsetPosition
-                                { listener_
-                                    | clicked = Nothing
-                                    , mouse = MouseInactive
-                                }
-                                eventMsg
-                            )
-                        ]
-               )
+            MouseDragging ->
+                [ Browser.onMouseMove (offsetPosition listener_ eventMsg)
+                , Browser.onMouseUp
+                    (offsetPosition
+                        { listener_
+                            | clicked = Nothing
+                            , mouse = MouseInactive
+                        }
+                        eventMsg
+                    )
+                ]
         )
 
 
@@ -1211,7 +1204,7 @@ decodeMove (Listener listener_) box scalar msg =
                 { listener_
                     | scalar = Just scalar
                     , box = box
-                    , hoverQueue = Just ( (x |> toFloat) - box.x, (y |> toFloat) - box.y )
+                    , hover = Just ( (x |> toFloat) - box.x, (y |> toFloat) - box.y )
                 }
             )
                 |> Listener
