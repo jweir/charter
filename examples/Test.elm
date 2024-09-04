@@ -52,6 +52,9 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     ( model, Cmd.none )
 
+c = "rgba(100, 0, 0, 0.8)"
+c1 = "rgba(200, 0, 0, 0.8)"
+c2 = "rgba(100, 150, 0, 0.8)"
 
 view : Model -> Html.Html Msg
 view model =
@@ -63,6 +66,18 @@ view model =
                 , Charter.area [ Svg.fill "#CCC", Svg.stroke "none" ] data1
                 , Charter.area [ Svg.fill "rgba(1,1,0.2,0.2)", Svg.stroke "none" ] data2
                 , Charter.zeroLine []
+                ]
+            ]
+        , chart (Size 620 120)
+            [ layer
+                (Box 600 100 10 10)
+                [ Charter.stack [
+                  ([ Svg.fill c, Svg.stroke "none" ], [(0,0), (10,0)])
+                  , ([ Svg.fill c, Svg.stroke "none" ], [(0,2),(5,4), (10,2)])
+                  ,([ Svg.fill c1, Svg.stroke "none" ], [(0,2), (6, 5), (10,2)])
+                  ,([ Svg.fill c2, Svg.stroke "none" ], [(0,2), (10,2)])
+                  ,([ Svg.fill c, Svg.stroke "none" ], [(5,12), (10,2)])
+                  ]
                 ]
             ]
         ]
