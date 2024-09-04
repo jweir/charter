@@ -1,3 +1,6 @@
+# 2.1.0
+stacked area charts supported
+
 # 2.0.7
 
 onAnimationFrameDelta now used to process events for a smoother experience
