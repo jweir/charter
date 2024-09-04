@@ -1,7 +1,7 @@
 module Charter exposing
     ( sparkline, Size, Element, layer, chart, Layer, Box
     , Point, DataSet, LabelSet
-    , line, area, dot, bar, label
+    , line, area, dot, bar, label, stack
     , zeroLine, highlight, Constraint(..), extents
     , Domain(..), getDomain, include
     , Listener, listener, subscribe, onSelect, onClick, onHover
@@ -23,7 +23,7 @@ module Charter exposing
 
 # Drawing
 
-@docs line, area, dot, bar, label
+@docs line, area, dot, bar, label, stack
 
 
 # Options
@@ -201,6 +201,9 @@ layer box elements =
                 DataElement s ->
                     ( coms ++ [ s ], evts, inc )
 
+                DataElements s ->
+                    ( coms ++ s, evts, inc )
+
                 IncludedData rec ->
                     ( coms, evts, rec :: inc )
 
@@ -343,6 +346,7 @@ convert (Layer rec) =
 {-| -}
 type Element a
     = DataElement (CommandSet a)
+    | DataElements (List (CommandSet a))
     | IncludedData (List ( Maybe Float, Maybe Float ))
     | Event (EventSet a)
     | Node (Element a) (Element a)
@@ -376,6 +380,21 @@ line attr data =
 area : List (Svg.Attribute a) -> DataSet -> Element a
 area attr data =
     commandSet data attr areaCmd |> DataElement
+
+
+{-| Created stacked graphs. All data will be sorted on the X and the Y must be a postive value.
+-}
+stack : List ( List (Svg.Attribute a), DataSet ) -> Element a
+stack data =
+    let
+        styles =
+            List.map Tuple.first data
+
+        points =
+            List.map Tuple.second data |> stackPoints
+    in
+    List.map2 (\s d -> commandSet d s lineCmd) styles points
+        |> DataElements
 
 
 {-| Dot draws a dot at each point. Set the radius of the dot by styling it `[Svg.r "3"]`
@@ -427,6 +446,11 @@ extents elements =
 
                     DataElement set ->
                         Just set.data
+
+                    DataElements all ->
+                        all
+                            |> List.concatMap .data
+                            |> Just
 
                     IncludedData _ ->
                         Nothing
@@ -531,11 +555,6 @@ zeroLineCmd _ attr scalar =
         [ ( x1, 0 ), ( x2, 0 ) ]
         attr
         scalar
-
-
-noop : Method a
-noop _ _ _ =
-    []
 
 
 lineCmd : Method a
@@ -684,6 +703,86 @@ path r data =
     data
         |> scale r
         |> List.foldr collect ""
+
+
+stackPoints : List DataSet -> List DataSet
+stackPoints data =
+    let
+        hoist set ( prev, out ) =
+            let
+                xs =
+                    List.map Tuple.first set
+
+                ( x0, x1 ) =
+                    Charter.Extras.minMax Charter.Extras.X set
+
+                offset =
+                    0.000000000000001
+
+                padded =
+                    prev
+                        |> List.map Tuple.first
+                        |> List.filter (\x -> x < x0 || x > x1)
+                        |> List.map (\x -> ( x, 0 ))
+                        |> (\s ->
+                                if List.isEmpty s then
+                                    []
+
+                                else
+                                    s ++ [ ( x0 - offset, 0 ), ( x1 + offset, 0 ) ]
+                           )
+
+                -- create points for any points in the previous dataset that do not
+                -- exist in the current data set.
+                -- A better method would be to only find the missing points that
+                -- are > x0 and < x1 (ie within the range of the data)
+                newSet =
+                    prev
+                        |> List.map Tuple.first
+                        |> List.filter (\x -> List.member x xs |> not)
+                        |> List.filter (\x -> x >= x0 && x <= x1)
+                        |> List.map (\x -> Charter.Extras.intersect Charter.Extras.X x set)
+                        |> List.filterMap identity
+                        |> (++) set
+                        |> (++) padded
+                        |> List.sortBy identity
+                        |> List.map
+                            (\( px, py ) ->
+                                case Charter.Extras.intersect Charter.Extras.X px prev of
+                                    Nothing ->
+                                        ( px, py )
+
+                                    Just ( _, ay ) ->
+                                        ( px, py + ay )
+                            )
+
+                bottom =
+                    newSet
+                        |> List.map
+                            (\( px, py ) ->
+                                case Charter.Extras.intersect Charter.Extras.X px prev of
+                                    Nothing ->
+                                        ( px, py )
+
+                                    Just ( _, ay ) ->
+                                        ( px, ay )
+                            )
+                        |> List.reverse
+            in
+            ( newSet, out ++ [ newSet ++ bottom ] )
+    in
+    -- for each set after the first
+    -- add the previous set's intersect y to the current point
+    case data of
+        first :: rest ->
+            List.foldl
+                hoist
+                ( first, [ first ] )
+                rest
+                |> Tuple.second
+
+        a ->
+            a
 
 
 
@@ -884,6 +983,7 @@ listener =
         -- last clicked position
         , clicked = Nothing
         , hover = Nothing
+
         -- holds the state until the animation frame can process it
         , hoverQueue = Nothing
         }

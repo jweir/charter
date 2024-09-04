@@ -1,15 +1,26 @@
-module Charter.Extras exposing (minMax, Axes(..), step, Step(..))
+module Charter.Extras exposing
+    ( minMax, Axes(..), step, Step(..)
+    , intersect
+    )
 
 {-| Additional functions to help in generating the graphs.
 
 
 # Definition
 
-@docs minMax, Axes, step, Step
+@docs minMax, Axes, step, Step, stackPoints
 
 -}
 
 import Tuple
+
+
+type alias Point =
+    ( Float, Float )
+
+
+type alias DataSet =
+    List ( Float, Float )
 
 
 y : ( Float, Float ) -> Float
@@ -22,7 +33,7 @@ x ( x_, _ ) =
     x_
 
 
-{-| Descibes which axes on the graph or from the data to use.
+{-| Describes which axes on the graph or from the data to use.
 -}
 type Axes
     = X
@@ -84,3 +95,80 @@ step msg points =
             )
             ( Nothing, [] )
         |> Tuple.second
+
+
+type Intersection
+    = None
+    | Left Point
+    | Exact Point
+    | Between Point Point
+
+
+findIntersect : Axes -> Float -> DataSet -> Intersection
+findIntersect axes value points =
+    let
+        comp ( ax, ay ) =
+            if axes == X then
+                compare value ax
+
+            else
+                compare value ay
+
+        find p inter =
+            case ( comp p, inter ) of
+                ( _, Between a b ) ->
+                    Between a b
+
+                ( _, Exact a ) ->
+                    Exact a
+
+                ( EQ, _ ) ->
+                    Exact p
+
+                ( GT, _ ) ->
+                    Left p
+
+                ( LT, Left a ) ->
+                    Between a p
+
+                ( LT, None ) ->
+                    None
+    in
+    points
+        |> List.foldl find None
+
+
+{-| Attempt to find a point where a given value intersects with a dataset
+along either the X or Y axis.
+
+This function is not optimized.
+
+-}
+intersect : Axes -> Float -> DataSet -> Maybe Point
+intersect axes value points =
+    case ( axes, findIntersect axes value points ) of
+        ( _, Exact p ) ->
+            Just p
+
+        ( X, Between ( lx, ly ) ( rx, ry ) ) ->
+            let
+                m =
+                    (ry - ly) / (rx - lx)
+
+                yIntercept =
+                    ry - (m * rx)
+            in
+            Just ( value, (m * value) + yIntercept )
+
+        ( Y, Between ( lx, ly ) ( rx, ry ) ) ->
+            let
+                m =
+                    (ry - ly) / (rx - lx)
+
+                xIntercept =
+                    rx - (m * ry)
+            in
+            Just ( (m * value) + xIntercept, value )
+
+        _ ->
+            Nothing
