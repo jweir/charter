@@ -1,26 +1,15 @@
-module Charter.Extras exposing
-    ( minMax, Axes(..), step, Step(..)
-    , intersect
-    )
+module Charter.Extras exposing (minMax, Axes(..), step, Step(..), intersect)
 
 {-| Additional functions to help in generating the graphs.
 
 
 # Definition
 
-@docs minMax, Axes, step, Step, stackPoints
+@docs minMax, Axes, step, Step, intersect
 
 -}
 
 import Tuple
-
-
-type alias Point =
-    ( Float, Float )
-
-
-type alias DataSet =
-    List ( Float, Float )
 
 
 y : ( Float, Float ) -> Float
@@ -99,12 +88,12 @@ step msg points =
 
 type Intersection
     = None
-    | Left Point
-    | Exact Point
-    | Between Point Point
+    | Left ( Float, Float )
+    | Exact ( Float, Float )
+    | Between ( Float, Float ) ( Float, Float )
 
 
-findIntersect : Axes -> Float -> DataSet -> Intersection
+findIntersect : Axes -> Float -> List ( Float, Float ) -> Intersection
 findIntersect axes value points =
     let
         comp ( ax, ay ) =
@@ -144,7 +133,7 @@ along either the X or Y axis.
 This function is not optimized.
 
 -}
-intersect : Axes -> Float -> DataSet -> Maybe Point
+intersect : Axes -> Float -> List ( Float, Float ) -> Maybe ( Float, Float )
 intersect axes value points =
     case ( axes, findIntersect axes value points ) of
         ( _, Exact p ) ->

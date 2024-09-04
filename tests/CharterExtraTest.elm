@@ -1,57 +1,8 @@
 module CharterExtraTest exposing (all)
 
-import Charter exposing (DataSet)
-import Charter.Extras as Charter exposing (Axes(..), intersect)
+import Charter.Extras as Charter
 import Expect
 import Test as T exposing (describe, test)
-
-
-stackPoints : List DataSet -> List DataSet
-stackPoints x =
-    let
-        hoist set ( prev, out ) =
-            let
-                newSet =
-                    set
-                        |> List.map
-                            (\( px, py ) ->
-                                case intersect X px prev of
-                                    Nothing ->
-                                        ( px, py )
-
-                                    Just ( ax, ay ) ->
-                                        ( px, py + ay )
-                            )
-
-                prevBalanced =
-                    prev
-                        |> List.map
-                            (\( px, py ) ->
-                                case intersect X px newSet of
-                                    Nothing ->
-                                        ( px, py )
-
-                                    Just ( ax, ay ) ->
-                                        ( px, py + ay )
-                            )
-
-                xx =
-                    newSet ++ prevBalanced
-            in
-            ( xx, out ++ [ xx ] )
-    in
-    -- for each set after the first
-    -- add the previous set's intersect y to the current point
-    case x of
-        first :: rest ->
-            List.foldl
-                hoist
-                ( first, [ first ] )
-                rest
-                |> Tuple.second
-
-        a ->
-            a
 
 
 all : T.Test

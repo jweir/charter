@@ -96,8 +96,6 @@ import Svg.Attributes as A
         , stroke
         , strokeWidth
         , width
-        , x
-        , y
         )
 import Svg.Events as E
 import Svg.Lazy as Svg
@@ -218,7 +216,7 @@ layer box elements =
         domain_ =
             commands
                 |> List.concatMap .data
-                |> findDomain (List.concatMap identity included)
+                |> findDomain (List.concat included)
 
         transformer : Transformer
         transformer =
@@ -343,7 +341,8 @@ convert (Layer rec) =
         )
 
 
-{-| -}
+{-| Charter Element. It is likely more performant to generate these outside of the view.
+-}
 type Element a
     = DataElement (CommandSet a)
     | DataElements (List (CommandSet a))
@@ -458,7 +457,7 @@ extents elements =
                     Event _ ->
                         Nothing
             )
-        |> List.concatMap identity
+        |> List.concat
         |> (\points ->
                 let
                     minMax v =
@@ -741,11 +740,9 @@ stackPoints data =
                         |> List.map Tuple.first
                         |> List.filter (\x -> List.member x xs |> not)
                         |> List.filter (\x -> x >= x0 && x <= x1)
-                        |> List.map (\x -> Charter.Extras.intersect Charter.Extras.X x set)
-                        |> List.filterMap identity
-                        |> (++) set
-                        |> (++) padded
-                        |> List.sortBy identity
+                        |> List.filterMap (\x -> Charter.Extras.intersect Charter.Extras.X x set)
+                        |> (\x -> x ++ set ++ padded)
+                        |> List.sort
                         |> List.map
                             (\( px, py ) ->
                                 case Charter.Extras.intersect Charter.Extras.X px prev of

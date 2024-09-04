@@ -1,7 +1,6 @@
 module CharterTest exposing (all)
 
 import Charter
-import Charter.Extras as CE
 import Expect
 import Test as T exposing (describe, test)
 
