@@ -13,8 +13,6 @@ elm install jweir/charter
 
 The below code will render just a line graph and a Y axis.
 
-![](/source/jweir/charter/1.1.2/examples/GettingStarted.png)
-
 ```
 import Charter
 import Svg.Attributes as Svg
@@ -84,49 +82,6 @@ main =
                first bottom, last top. We want the Y Axis on
                the bottom, so this list is reversed.
             -}
-            |> List.reverse
-        )
-
-
-foo =
-    -- A
-    Charter.chart
-        -- B
-        { width = 330, height = 70 }
-        -- C
-        ([ Charter.Layer
-            -- D
-            { width = 300, height = 50, x = 10, y = 10 }
-            -- E
-            [ Charter.line [] points
-            , Charter.dot [ Svg.fill "red" ] points
-            ]
-
-         -- F
-         , Charter.Layer
-            -- E
-            { width = 310, height = 50, x = 10, y = 10 }
-            -- G
-            ([ 0, 28, 56 ]
-                |> List.concatMap
-                    (\y ->
-                        [ Charter.line
-                            [ Svg.stroke "lightgray" ]
-                            [ ( 0, y ), ( 1, y ) ]
-
-                        -- H
-                        , Charter.label
-                            []
-                            [ ( ( 1, y )
-                              , [ Svg.fontSize "10px" ]
-                              , String.fromFloat y
-                              )
-                            ]
-                        ]
-                    )
-            )
-         ]
-            -- I
             |> List.reverse
         )
 ```
