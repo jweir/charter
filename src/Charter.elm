@@ -331,13 +331,20 @@ convert (Layer rec) =
                                     )
                                     |> Just
                     )
+
+        eventLayer =
+            if List.isEmpty events then
+                []
+
+            else
+                [ eventArea rec.transformer events ]
     in
     lazyLayer rec.box
         ((rec.commands
             |> List.concatMap eval
          )
             -- add the events to the end, so it is on top of the other elements
-            ++ [ eventArea rec.transformer events ]
+            ++ eventLayer
         )
 
 

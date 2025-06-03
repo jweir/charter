@@ -1,3 +1,7 @@
+# 2.1.2
+
+Only include the event layer if there are events.
+
 # 2.1.1
 
 Removed the onAnimationFrameDelta.  It forced too many updates and was unperformant with high point count charts.
