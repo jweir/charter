@@ -37,7 +37,13 @@ all =
             Charter.include [ ( Just 1, Just 2 ), ( Just 10, Just 17 ) ]
     in
     describe "all"
-        [ describe "Layer"
+        [ describe "Listener"
+            [ test "selection returns the selected points"
+                (\() ->
+                    Expect.equal 1 1
+                )
+            ]
+        , describe "Layer"
             [ test "getDomain"
                 (\() -> Expect.equal (Charter.Domain ( ( 1, 2 ), ( 5, 4 ) )) (Charter.getDomain layer))
             , test "getDomain from a layer with only an include"

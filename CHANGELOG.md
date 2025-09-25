@@ -1,3 +1,7 @@
+# 2.2 
+
+All manual selection on the listener.
+
 # 2.1.2
 
 Only include the event layer if there are events.

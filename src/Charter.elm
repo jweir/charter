@@ -5,7 +5,7 @@ module Charter exposing
     , zeroLine, highlight, Constraint(..), extents
     , Domain(..), getDomain, include
     , Listener, listener, subscribe, onSelect, onClick, onHover
-    , selection, clicked, hover, active
+    , select, selection, clicked, hover, active
     )
 
 {-| This library is for generating inline graphs, called sparklines.
@@ -71,7 +71,7 @@ module Charter exposing
 Use the below functions to extract the data from events. The Point values
 returned are scaled to the input data, not the mouse events.
 
-@docs selection, clicked, hover, active
+@docs select, selection, clicked, hover, active
 
 -}
 
@@ -298,7 +298,8 @@ convert (Layer rec) =
                                     MouseInactive ->
                                         E.on "mousedown"
                                             (decodeSelection
-                                                (Listener listener_ |> rescaleListener rec.transformer)
+                                                -- must remove any preselection once a selection starts
+                                                (Listener { listener_ | userSelection = Nothing } |> rescaleListener rec.transformer)
                                                 rec.box
                                                 rec.transformer
                                                 msg
@@ -952,6 +953,10 @@ type Listener
 type alias EventRecord =
     { mouse : Mouse
     , box : Box
+
+    -- an option for the user to preselect a range
+    -- a better design would be to store the selection internally and remove the start,offset,and current
+    , userSelection : Maybe ( Point, Point )
     , scalar : Maybe Transformer
 
     -- the starting point on the page
@@ -975,6 +980,7 @@ listener =
         { mouse = MouseInactive
         , box = Box 0 0 0 0
         , scalar = Nothing
+        , userSelection = Nothing
 
         -- the starting point on the page
         , offset = Nothing
@@ -1109,8 +1115,11 @@ Use this selection to filter the applications data into a subset.
 -}
 selection : Listener -> Maybe ( Point, Point )
 selection (Listener listener_) =
-    case ( listener_.scalar, listener_.start, listener_.current ) of
-        ( Just scalar, Just ( dx0, dy0 ), Just ( dx1, dy1 ) ) ->
+    case ( listener_.scalar, listener_.userSelection, ( listener_.start, listener_.current ) ) of
+        ( _, Just ( a, b ), _ ) ->
+            Just ( a, b )
+
+        ( Just scalar, _, ( Just ( dx0, dy0 ), Just ( dx1, dy1 ) ) ) ->
             let
                 ( ix, iy ) =
                     scalar.invert
@@ -1128,6 +1137,20 @@ selection (Listener listener_) =
 
         _ ->
             Nothing
+
+
+{-| Use select to manually apply a selected range to a Listener.
+
+If the OnlyX constraint is used to render the selection, then the y values on
+the given points can be ignored. This is common for time series data.
+
+-}
+select : Listener -> Point -> Point -> Listener
+select (Listener l) a b =
+    { l
+        | userSelection = Just ( a, b )
+    }
+        |> Listener
 
 
 offsetPosition : EventRecord -> (Listener -> a) -> Json.Decoder a
@@ -1273,38 +1296,49 @@ rescaleListener scalar (Listener l) =
 
 highlightCmd : List (Svg.Attribute a) -> Constraint -> Listener -> Method a
 highlightCmd style constraint listener_ _ _ scalar =
+    let
+        createBox x0 y0 x1 y1 =
+            case constraint of
+                FreeForm ->
+                    Box x0 y0 x1 y1
+
+                OnlyX ->
+                    Box x0 scalar.box.height x1 0
+
+        createRec box =
+            [ rect
+                ([ setAttr A.x box.x
+                 , setAttr A.y box.y
+                 , setAttr width box.width
+                 , setAttr height box.height
+                 , fill "rgba(255,0,0,0.5)"
+                 ]
+                    ++ style
+                )
+                []
+            ]
+    in
     case rescaleListener scalar listener_ of
         Listener l ->
-            case ( l.start, l.current ) of
-                ( Just ( ax1, ay1 ), Just ( bx1, by1 ) ) ->
+            -- user selection takes precedence
+            -- it should be possible to only have the user selection, although that maybe a bit slower
+            -- when rendering the preview selection
+            case ( l.userSelection, l.start, l.current ) of
+                ( Just ( ( x0, y0 ), ( x1, y1 ) ), _, _ ) ->
                     let
-                        box =
-                            case constraint of
-                                FreeForm ->
-                                    Box
-                                        (ax1 - bx1 |> abs)
-                                        (ay1 - by1 |> abs)
-                                        (min ax1 bx1)
-                                        (min ay1 by1)
-
-                                OnlyX ->
-                                    Box
-                                        (ax1 - bx1 |> abs)
-                                        scalar.box.height
-                                        (min ax1 bx1)
-                                        0
+                        ( mx, my ) =
+                            scalar.scale
                     in
-                    [ rect
-                        ([ setAttr A.x box.x
-                         , setAttr A.y box.y
-                         , setAttr width box.width
-                         , setAttr height box.height
-                         , fill "rgba(255,0,0,0.5)"
-                         ]
-                            ++ style
-                        )
-                        []
-                    ]
+                    createBox (mx x0) (my y0) (mx x1) (my y1)
+                        |> createRec
+
+                ( Nothing, Just ( ax1, ay1 ), Just ( bx1, by1 ) ) ->
+                    createBox
+                        (ax1 - bx1 |> abs)
+                        (ay1 - by1 |> abs)
+                        (min ax1 bx1)
+                        (min ay1 by1)
+                        |> createRec
 
                 _ ->
                     []
