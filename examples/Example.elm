@@ -36,9 +36,9 @@ type Msg
 main : Program () Model Msg
 main =
   let 
-      x0 = start + 5700000
-      x1 = start + 9700000
-  in
+      x0 = start
+      x1 = start + (1000 * 60 * 60)
+  in 
     Browser.element
         { init =
             \_ ->
@@ -129,6 +129,7 @@ view model =
                 , Charter.label [] (hoverLabel model.hover)
                 , Charter.zeroLine []
                 ]
+        sx = 10 
     in
     Html.div []
         [ Html.div []
@@ -136,7 +137,10 @@ view model =
               chart (Size (width + 20) 120)
                 [ layer
                     (Box width 120 0 0)
-                    [ Charter.line [] [(10,10),(20,20)]
+                    [ Charter.line [] (List.map (\(x,y) -> (sx + x,y)) [(0,0),(0.75, 3),(1,1),(2,0),(3,1),(4,0),(4.5, -1),(5,1),(6,0)])
+                    , Charter.highlight [] Charter.OnlyX (Charter.select Charter.listener (sx +0.75,0) (sx + 2,0) )
+                    , Charter.highlight [] Charter.FreeForm (Charter.select Charter.listener (sx + 3,0.25) (sx + 4.5,0.75) )
+                    , Charter.highlight [] Charter.FreeForm (Charter.select Charter.listener (sx + 4,0) (sx + 5,1) )
                     , Charter.zeroLine []
                     ]
                 ]
@@ -194,10 +198,10 @@ view model =
             , Html.p []
                 [ Html.text "Here is a sparkline. "
                 , sparkline (Size 100 20)
-                    [ Charter.onSelect model.listener2 Select2
-                    , Charter.highlight [] Charter.OnlyX model.listener2
-                    , Charter.line [] data0
+                    [ Charter.line [] data0
                     , Charter.line [] data1
+                    , Charter.onSelect model.listener2 Select2
+                    , Charter.highlight [] Charter.OnlyX model.listener2
                     ]
                 , Html.text " Click and drag on it for details."
                 , if Charter.selection model.listener2 /= Nothing then
@@ -304,7 +308,6 @@ timeAxis box ticks dataLayer =
         ]
 
 start = 1566316269000
-end = 1566345969000
 
 data0 : List Point
 data0 =

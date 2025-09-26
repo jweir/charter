@@ -1,3 +1,7 @@
+# 2.2.1
+
+Fix selection offset for user selection 
+
 # 2.2 
 
 All manual selection on the listener.

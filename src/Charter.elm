@@ -1297,13 +1297,13 @@ rescaleListener scalar (Listener l) =
 highlightCmd : List (Svg.Attribute a) -> Constraint -> Listener -> Method a
 highlightCmd style constraint listener_ _ _ scalar =
     let
-        createBox x0 y0 x1 y1 =
+        createBox w h x y =
             case constraint of
                 FreeForm ->
-                    Box x0 y0 x1 y1
+                    Box w h x y
 
                 OnlyX ->
-                    Box x0 scalar.box.height x1 0
+                    Box w scalar.box.height x 0
 
         createRec box =
             [ rect
@@ -1328,8 +1328,20 @@ highlightCmd style constraint listener_ _ _ scalar =
                     let
                         ( mx, my ) =
                             scalar.scale
+
+                        h =
+                            (my y0 - my y1) |> abs
+
+                        w =
+                            (mx x0 - mx x1) |> abs
+
+                        x =
+                            min x0 x1
+
+                        y =
+                            max y0 y1
                     in
-                    createBox (mx x0) (my y0) (mx x1) (my y1)
+                    createBox w h (mx x) (my y)
                         |> createRec
 
                 ( Nothing, Just ( ax1, ay1 ), Just ( bx1, by1 ) ) ->
